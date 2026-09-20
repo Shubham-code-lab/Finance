@@ -63,8 +63,13 @@ fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression
 
 ## GitHub Pages
 
-The site is deployed from `main` by [the publish workflow](.github/workflows/publish.yml) when `release.json` has `"publish": true`. The production build uses `/Finance/` as its base path.
+The site is built from `main` by [the publish workflow](.github/workflows/publish.yml) when `release.json` has `"publish": true`. The workflow publishes only the compiled site to the `gh-pages` branch, and the production build uses `/Finance/` as its base path.
 
 Repository changes should be made on a ticket branch and merged through a pull request. CI runs linting, formatting checks, tests, and a production build before merge. Personal statements and spreadsheet exports must never be committed.
 
 After the first deployment, add `shubham-code-lab.github.io` to Firebase Authentication's authorized domains so Google sign-in works on the hosted dashboard.
+
+One-time GitHub website settings:
+
+1. In **Settings → Pages**, choose **Deploy from a branch**, then `gh-pages` and `/ (root)`.
+2. In **Settings → Rules → Rulesets**, protect `main`: require a pull request and require the `check` status check; block deletion and force pushes.

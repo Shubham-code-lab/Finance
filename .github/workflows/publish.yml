@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -18,9 +16,6 @@ jobs:
   release:
     if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip publish]') }}
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,17 +44,10 @@ jobs:
           BASE_PATH: /Finance/
         run: npm run build
 
-      - name: Configure Pages
+      - name: Publish gh-pages branch
         if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
-        uses: actions/configure-pages@v5
-
-      - name: Upload site
-        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
-        uses: actions/upload-pages-artifact@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-
-      - name: Deploy site
-        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
