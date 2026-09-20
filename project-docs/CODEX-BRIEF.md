@@ -2,7 +2,7 @@
 
 Paste this whole file into Codex. Do not query Jira. Do not invent a backend.
 
-You are implementing a **client-only** personal finance web app from the docs in this repo. Read every file under `docs/` before writing code. Follow them over any improvisation.
+You are implementing a **client-only** personal finance web app from the specifications in this repo. Read every file under `project-docs/` before writing code. Follow them over any improvisation.
 
 ## Environment
 
@@ -34,19 +34,19 @@ User creates **custom tables** (or imports CSV/XLSX into a table), maps columns 
 
 ### 2. Design tokens + JSS theme
 
-Implement `docs/UI.md`. Global reset, light gray canvas, compact cards. Every visual style goes through `createUseStyles` and tokens.
+Implement `project-docs/UI.md`. Global reset, light gray canvas, compact cards. Every visual style goes through `createUseStyles` and tokens.
 
 ### 3. Domain types + IndexedDB
 
-Implement `docs/DATA-MODEL.md` and the storage section of `docs/ARCHITECTURE.md`. Empty DB is valid. Versioned schema with a migrate function.
+Implement `project-docs/DATA-MODEL.md` and the storage section of `project-docs/ARCHITECTURE.md`. Empty DB is valid. Versioned schema with a migrate function.
 
 ### 4. Calculation engine + tests first
 
-Implement `docs/CALCULATIONS.md` as **pure functions** with no DOM/IndexedDB. Tests for savings, savings rate, net worth, investment gain/loss, transfer exclusion, combine-compatibility. Do not skip tests.
+Implement `project-docs/CALCULATIONS.md` as **pure functions** with no DOM/IndexedDB. Tests for savings, savings rate, net worth, investment gain/loss, transfer exclusion, combine-compatibility. Do not skip tests.
 
 ### 5. Custom tables (primary data path)
 
-Implement `docs/DATA-INGESTION.md` custom tables:
+Implement `project-docs/DATA-INGESTION.md` custom tables:
 
 - Create table (name + columns)
 - Add / edit / delete rows
@@ -68,7 +68,7 @@ Grid of widgets: drag to rearrange, hide/show, persist layout. Widget types: KPI
 
 ### 9. Chart builder + semantics
 
-Implement `docs/CHART-SEMANTICS.md` exactly. Combine control only when compatible. Otherwise separate series + explanation string. Multi-series compare (spend vs invest) as two lines, never one summed line if kinds differ.
+Implement `project-docs/CHART-SEMANTICS.md` exactly. Combine control only when compatible. Otherwise separate series + explanation string. Multi-series compare (spend vs invest) as two lines, never one summed line if kinds differ.
 
 ### 10. Backup
 

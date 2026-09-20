@@ -1,6 +1,6 @@
 # Lump-sum stock performance (market prices)
 
-Status: **specified, not implemented.** Implement from `docs/CHATGPT-STOCK-PERFORMANCE.md`.
+Status: **specified, not implemented.** Implement from `project-docs/CHATGPT-STOCK-PERFORMANCE.md`.
 
 ## Where (and where not)
 

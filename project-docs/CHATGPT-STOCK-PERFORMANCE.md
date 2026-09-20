@@ -6,11 +6,11 @@ Copy everything under **Prompt** through the end of this file.
 
 ## Prompt
 
-You are implementing one feature in the existing Finance SPA. Spec: `docs/STOCK-PERFORMANCE.md`. Do not improvise a new page.
+You are implementing one feature in the existing Finance SPA. Spec: `project-docs/STOCK-PERFORMANCE.md`. Do not improvise a new page.
 
 ### Repo
 
-- `d:\Project\Finance`. Read `AGENTS.md`, `docs/STOCK-PERFORMANCE.md`, then `src/dashboard/Dashboard.tsx` (Investment section), `src/features/holdings/HoldingsView.tsx`, `src/domain/types.ts`, `src/storage/db.ts`.
+- `d:\Project\Finance`. Read `AGENTS.md`, `project-docs/STOCK-PERFORMANCE.md`, then the relevant files under `src/`.
 - No Jira. No git push / config. Commit only if asked. `npm test` and `npm run build` when done.
 
 ### UI location — dashboard homepage only

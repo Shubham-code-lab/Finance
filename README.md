@@ -22,16 +22,16 @@ The app is a React SPA backed by Google Sign-In and Cloud Firestore. It implemen
 
 | Doc | Purpose |
 | --- | --- |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What was built, in order |
-| [docs/STOCK-PERFORMANCE.md](docs/STOCK-PERFORMANCE.md) | Lump-sum stock market history (specified, not built) |
-| [docs/CHATGPT-STOCK-PERFORMANCE.md](docs/CHATGPT-STOCK-PERFORMANCE.md) | Paste-ready ChatGPT 5.5 prompt for that feature |
-| [docs/CODEX-BRIEF.md](docs/CODEX-BRIEF.md) | Ordered implementation brief. Paste this into Codex. |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, folders, storage, dashboard widgets |
-| [docs/DATA-MODEL.md](docs/DATA-MODEL.md) | Types, tables, transactions, metrics |
-| [docs/CHART-SEMANTICS.md](docs/CHART-SEMANTICS.md) | Inflow/outflow rules, combine vs separate series |
-| [docs/DATA-INGESTION.md](docs/DATA-INGESTION.md) | Custom tables (v1), CSV/Excel, PDF later |
-| [docs/CALCULATIONS.md](docs/CALCULATIONS.md) | Savings, rate, net worth, investment P/L |
-| [docs/UI.md](docs/UI.md) | Tokens, layout, widget chrome |
+| [project-docs/CHANGELOG.md](project-docs/CHANGELOG.md) | What was built, in order |
+| [project-docs/STOCK-PERFORMANCE.md](project-docs/STOCK-PERFORMANCE.md) | Lump-sum stock market history |
+| [project-docs/CHATGPT-STOCK-PERFORMANCE.md](project-docs/CHATGPT-STOCK-PERFORMANCE.md) | Paste-ready implementation prompt |
+| [project-docs/CODEX-BRIEF.md](project-docs/CODEX-BRIEF.md) | Ordered implementation brief |
+| [project-docs/ARCHITECTURE.md](project-docs/ARCHITECTURE.md) | Layers, folders, storage, dashboard widgets |
+| [project-docs/DATA-MODEL.md](project-docs/DATA-MODEL.md) | Types, tables, transactions, metrics |
+| [project-docs/CHART-SEMANTICS.md](project-docs/CHART-SEMANTICS.md) | Inflow/outflow rules, combine vs separate series |
+| [project-docs/DATA-INGESTION.md](project-docs/DATA-INGESTION.md) | Custom tables and file import |
+| [project-docs/CALCULATIONS.md](project-docs/CALCULATIONS.md) | Savings, rate, net worth, investment P/L |
+| [project-docs/UI.md](project-docs/UI.md) | Tokens, layout, widget chrome |
 
 ## Status
 
@@ -43,7 +43,7 @@ The app is a React SPA backed by Google Sign-In and Cloud Firestore. It implemen
 - [x] Declared income + future cash trend widget
 - [x] Groww snapshot constants removed from product seed
 
-See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the personal SIP dump (one reload, then UI only).
+See [project-docs/CHANGELOG.md](project-docs/CHANGELOG.md) for release history.
 
 ## Development
 
@@ -63,7 +63,7 @@ fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression
 
 ## GitHub Pages
 
-The site is built from `main` by [the publish workflow](.github/workflows/publish.yml) when `release.json` has `"publish": true`. The workflow publishes only the compiled site to the `gh-pages` branch, and the production build uses `/Finance/` as its base path.
+The site is built from `main` by [the publish workflow](.github/workflows/publish.yml) when `release.json` has `"publish": true`. The workflow commits only the compiled site to `main/docs/`, and the production build uses `/Finance/` as its base path.
 
 Repository changes should be made on a ticket branch and merged through a pull request. CI runs linting, formatting checks, tests, and a production build before merge. Personal statements and spreadsheet exports must never be committed.
 
@@ -71,5 +71,5 @@ After the first deployment, add `shubham-code-lab.github.io` to Firebase Authent
 
 One-time GitHub website settings:
 
-1. In **Settings → Pages**, choose **Deploy from a branch**, then `gh-pages` and `/ (root)`.
-2. In **Settings → Rules → Rulesets**, protect `main`: require a pull request and require the `check` status check; block deletion and force pushes.
+1. In **Settings → Pages**, choose **Deploy from a branch**, then `main` and `/docs`.
+2. In **Settings → Rules → Rulesets**, protect `main`: require a pull request and require the `check` status check; block deletion and force pushes. Add GitHub Actions to the bypass list so the publish workflow can update `docs/`.

@@ -104,4 +104,4 @@ Spreadsheet density: row height ~28–32px, header sticky, horizontal scroll if 
 
 ## Copy for PDF stub
 
-See `docs/DATA-INGESTION.md`.
+See `project-docs/DATA-INGESTION.md`.

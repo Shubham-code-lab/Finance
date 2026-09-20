@@ -4,7 +4,7 @@ This repository is **Finance**, a personal finance SPA backed by Firebase Authen
 
 ## Who implements
 
-Application code is specified in `docs/`. Start with `docs/CODEX-BRIEF.md`.
+Application code is specified in `project-docs/`. Start with `project-docs/CODEX-BRIEF.md`.
 
 Do **not** use Jira, Linear, or MCP issue trackers. This project has no tickets. The docs are the spec.
 

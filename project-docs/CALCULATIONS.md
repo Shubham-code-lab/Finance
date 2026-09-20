@@ -126,7 +126,7 @@ Carry-forward must be tested (empty month does not drop net worth to 0).
 
 ## Combine
 
-See `docs/CHART-SEMANTICS.md`. Combined series = sum of bucket values for member metrics, **only** after `canCombine` is ok.
+See `project-docs/CHART-SEMANTICS.md`. Combined series = sum of bucket values for member metrics, **only** after `canCombine` is ok.
 
 ## Test cases (required)
 
