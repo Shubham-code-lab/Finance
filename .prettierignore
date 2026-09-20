@@ -1,0 +1,9 @@
+dist
+node_modules
+.chrome-layout-check*
+coverage
+package-lock.json
+src/assets
+*.png
+*.xlsx
+*.har

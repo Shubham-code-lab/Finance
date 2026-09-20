@@ -1,0 +1,10 @@
+---
+description: Finance app stack and spec location. No Jira.
+alwaysApply: true
+---
+
+# Finance
+
+Spec is `docs/`, especially `docs/CODEX-BRIEF.md`. No Jira.
+
+Stack: React, TypeScript, Vite, Recharts, react-jss `createUseStyles`. No inline styles, MUI, or Tailwind. IndexedDB only. PDF import is a stub. Custom tables are v1 ingestion. Never merge inflow and outflow into one summed chart series.

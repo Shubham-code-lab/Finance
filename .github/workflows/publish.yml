@@ -1,0 +1,65 @@
+name: Publish site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip publish]') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read release switch
+        id: release
+        shell: bash
+        run: |
+          publish=$(jq -r '.publish' release.json)
+          echo "publish=${publish}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        run: npm ci
+
+      - name: Build for GitHub Pages
+        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        env:
+          BASE_PATH: /Finance/
+        run: npm run build
+
+      - name: Configure Pages
+        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy site
+        if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4
