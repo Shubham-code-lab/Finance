@@ -33,25 +33,29 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+          cache-dependency-path: finance-code/package-lock.json
 
       - name: Install dependencies
         if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        working-directory: finance-code
         run: npm ci
 
       - name: Build for GitHub Pages
         if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
+        working-directory: finance-code
         env:
           BASE_PATH: /Finance/
         run: npm run build
 
-      - name: Replace published site in main/docs
+      - name: Replace published site at repository root
         if: github.event_name == 'workflow_dispatch' || steps.release.outputs.publish == 'true'
         shell: bash
         run: |
-          rm -rf docs
-          mkdir docs
-          cp -a dist/. docs/
-          touch docs/.nojekyll
+          rm -rf assets docs
+          rm -f index.html 404.html .nojekyll
+          cp -a finance-code/dist/. .
+          cp index.html 404.html
+          touch .nojekyll
           jq '.publish = false' release.json > release.tmp.json
           mv release.tmp.json release.json
 
@@ -61,7 +65,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs release.json
+          git add -A -- assets index.html 404.html .nojekyll release.json
           if git diff --cached --quiet; then
             echo "No site changes to commit."
             exit 0

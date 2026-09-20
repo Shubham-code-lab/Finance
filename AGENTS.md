@@ -5,6 +5,7 @@ This repository is **Finance**, a personal finance SPA backed by Firebase Authen
 ## Who implements
 
 Application code is specified in `project-docs/`. Start with `project-docs/CODEX-BRIEF.md`.
+The Vite application and its package scripts live in `finance-code/`; run frontend commands from that directory.
 
 Do **not** use Jira, Linear, or MCP issue trackers. This project has no tickets. The docs are the spec.
 
@@ -20,7 +21,7 @@ PDF import is deferred. Custom tables are the v1 data path. Chart series: never 
 - If code is shared by sibling files, place it in a clearly named module beside their nearest common parent. Apply the same rule to shared types, constants, hooks, and utilities. Do not create distant catch-all utility files.
 - Put network requests and remote API adapters in dedicated `api` modules. Components call those modules through hooks or query functions; components must not construct or send API requests directly.
 - Never use JSX `style` props, `sx`, Tailwind, or ad-hoc CSS. Use `react-jss` classes backed by theme tokens. Values that are genuinely data-driven should become class variants, CSS custom properties set by a focused adapter, or library API props when the library owns rendering.
-- Run `npm run lint`, `npm run format:check`, `npm test`, and `npm run build` before handing off code. Use `npm run format` to apply Prettier.
+- From `finance-code/`, run `npm run lint`, `npm run format:check`, `npm test`, and `npm run build` before handing off code. Use `npm run format` to apply Prettier.
 - ESLint and Prettier configuration are project policy. Do not disable rules inline to bypass these requirements; refactor the code instead.
 
 ## Node

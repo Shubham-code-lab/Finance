@@ -6,6 +6,10 @@ Local-first personal finance dashboard. Import or enter transactions, run correc
 
 The app is a React SPA backed by Google Sign-In and Cloud Firestore. It implements custom tables, dashboard widgets, chart semantics, CSV/Excel and PDF import, and JSON backup/restore.
 
+- Source application: [`finance-code/`](finance-code/)
+- Published site: root `index.html`, `404.html`, and `assets/`
+- Product documentation: [`project-docs/`](project-docs/)
+
 ## Constraints (non-negotiable)
 
 - React, TypeScript, Vite
@@ -48,6 +52,7 @@ See [project-docs/CHANGELOG.md](project-docs/CHANGELOG.md) for release history.
 ## Development
 
 ```bash
+cd finance-code
 npm install
 npm run dev
 npm test
@@ -63,7 +68,7 @@ fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression
 
 ## GitHub Pages
 
-The site is built from `main` by [the publish workflow](.github/workflows/publish.yml) when `release.json` has `"publish": true`. The workflow commits only the compiled site to `main/docs/`, and the production build uses `/Finance/` as its base path.
+The site is built from `finance-code/` on `main` by [the publish workflow](.github/workflows/publish.yml) when `release.json` has `"publish": true`. The workflow commits the compiled `index.html`, `404.html`, and `assets/` at the repository root. The production build uses `/Finance/` as its base path.
 
 Repository changes should be made on a ticket branch and merged through a pull request. CI runs linting, formatting checks, tests, and a production build before merge. Personal statements and spreadsheet exports must never be committed.
 
@@ -71,5 +76,5 @@ After the first deployment, add `shubham-code-lab.github.io` to Firebase Authent
 
 One-time GitHub website settings:
 
-1. In **Settings → Pages**, choose **Deploy from a branch**, then `main` and `/docs`.
-2. In **Settings → Rules → Rulesets**, protect `main`: require a pull request and require the `check` status check; block deletion and force pushes. Add GitHub Actions to the bypass list so the publish workflow can update `docs/`.
+1. In **Settings → Pages**, choose **Deploy from a branch**, then `main` and `/(root)`.
+2. In **Settings → Rules → Rulesets**, protect `main`: require a pull request and require the `check` status check; block deletion and force pushes. Add GitHub Actions to the bypass list so the publish workflow can update the compiled root files.

@@ -21,9 +21,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+          cache-dependency-path: finance-code/package-lock.json
 
       - name: Install dependencies
+        working-directory: finance-code
         run: npm ci
 
       - name: Verify application
+        working-directory: finance-code
         run: npm run check
