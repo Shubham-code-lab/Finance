@@ -1,1 +1,0 @@
-import{aA as c,u as r,j as v,k as m}from"./index-BSXajDh2.js";function p({amountMinor:s,tone:t="auto",currency:o="INR",showPaise:i=!1}){const e=c(),{masked:n}=r(),a=t==="auto"?s>0?"positive":s<0?"negative":"steady":t,y=a==="positive"?e.moneyPositive:a==="negative"?e.moneyNegative:e.moneySteady;return v.jsx("span",{className:`${e.money} ${y}`,children:m(s,o,i,n)})}export{p as M};
