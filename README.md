@@ -36,6 +36,7 @@ The app is a React SPA backed by Google Sign-In and Cloud Firestore. It implemen
 | [project-docs/DATA-INGESTION.md](project-docs/DATA-INGESTION.md) | Custom tables and file import |
 | [project-docs/CALCULATIONS.md](project-docs/CALCULATIONS.md) | Savings, rate, net worth, investment P/L |
 | [project-docs/UI.md](project-docs/UI.md) | Tokens, layout, widget chrome |
+| [project-docs/GITHUB-PAGES-FIREBASE-DEPLOYMENT.md](project-docs/GITHUB-PAGES-FIREBASE-DEPLOYMENT.md) | Complete GitHub Pages and Firebase setup, releases, security, and troubleshooting |
 
 ## Status
 
