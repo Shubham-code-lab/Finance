@@ -94,6 +94,22 @@ If a chart has both inflow and outflow, use a shared y-axis of magnitudes plus a
 - Bar for category/account groupBy.
 - No stacked bar that stacks mixed kinds. Stacked (later) only if every stack member is combinable.
 
+## Market moments
+
+Market-comparison charts may show compact historical **Drops** and **Highs** for the series currently listed on the graph.
+
+- Normalize every listed stock or fund to percentage change from its first value in the selected range.
+- Average those normalized values with equal weight. Do not let a high-priced security dominate the aggregate.
+- A drop is the aggregate percentage decline from its previous running peak.
+- A high is a separated local maximum in aggregate return from the selected range start.
+- Ignore moves smaller than 3%.
+- Suppress the feature when the selected calendar range is shorter than 90 days or has fewer than 45 observations.
+- De-cluster nearby extrema and show no more than five drops and five highs.
+- Keep the graph clean: render a vertical reference line only for the one moment the user pins.
+- Describe these as historical signals, never as buy recommendations or predictions.
+
+Mutual-fund Price and Change % charts use historical NAV data. SIP contributions and current portfolio value must not be presented as NAV history or used to infer market drawdowns.
+
 ## Builder fields
 
 1. Chart type  

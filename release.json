@@ -1,7 +1,11 @@
 {
-  "version": "1.0.5",
-  "publish": false,
-  "feature": [],
+  "version": "1.1.0",
+  "publish": true,
+  "feature": [
+    "Add historical mutual-fund NAV price and percentage charts",
+    "Add equal-weight top drop and high markers across market charts",
+    "Make investment chips optional graph highlights"
+  ],
   "bugfix": [],
   "refactor": [],
   "other": []

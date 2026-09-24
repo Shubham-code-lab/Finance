@@ -48,6 +48,8 @@ import { DateRangePicker } from '@/components/DateRangePicker'
 import { DateRangeValue, isValidDateRange } from '@/components/dateRange'
 import { Button, Card, Select } from '@/components/ui'
 import { formatDateLabel, formatMoney, todayIso } from '@/domain/money'
+import { MarketMomentsBar } from '@/features/holdings/MarketMomentsBar'
+import { equalWeightPerformance, findMarketMoments } from '@/features/holdings/marketMoments'
 import { recoverStockListState, SavedStockList, StockListSymbol } from '@/domain/stockLists'
 import {
   getSelectedMarketDailyCloses,
@@ -515,6 +517,7 @@ export function StockMarketComparison({
   const [activeWatchlistId, setActiveWatchlistId] = useState('')
   const [watchlistName, setWatchlistName] = useState('')
   const [watchlistError, setWatchlistError] = useState('')
+  const [pinnedMomentId, setPinnedMomentId] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
   const [pendingRemoval, setPendingRemoval] = useState<MarketSymbol | null>(null)
   const [inputError, setInputError] = useState('')
@@ -695,6 +698,23 @@ export function StockMarketComparison({
     })
     return [...rows.values()].sort((left, right) => String(left.date).localeCompare(String(right.date)))
   }, [mode, series])
+  const comparisonPerformance = useMemo(
+    () =>
+      equalWeightPerformance(
+        series.map(({ stock, closes }) => ({
+          id: stock.ticker,
+          points: closes.map((close) => ({ date: close.date, value: close.closeMinor })),
+        })),
+      ),
+    [series],
+  )
+  const moments = useMemo(() => findMarketMoments(comparisonPerformance), [comparisonPerformance])
+  const pinnedMoment = moments.find((moment) => moment.id === pinnedMomentId) ?? null
+  const rangeDays = Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000)
+
+  useEffect(() => {
+    if (pinnedMomentId && !moments.some((moment) => moment.id === pinnedMomentId)) setPinnedMomentId(null)
+  }, [moments, pinnedMomentId])
 
   const sectorData = useMemo(() => {
     const grouped = new Map<string, MarketSymbol[]>()
@@ -1248,61 +1268,87 @@ export function StockMarketComparison({
         {!validRange ? <div className={classes.error}>Select a valid start and end date.</div> : null}
         {errors.length ? <div className={classes.error}>{errors.join(' | ')}</div> : null}
         {chartData.length ? (
-          <div className={classes.chart}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData}>
-                <CartesianGrid stroke={tokens.color.border} vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tickLine={false}
-                  axisLine={false}
-                  minTickGap={30}
-                  tickFormatter={(value) => formatDateLabel(String(value))}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  width={76}
-                  domain={mode === 'percent' ? [(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)] : ['auto', 'auto']}
-                  tickFormatter={(value) =>
-                    mode === 'percent'
-                      ? `${Number(value).toFixed(0)}%`
-                      : `₹${new Intl.NumberFormat('en-IN', { notation: 'compact' }).format(Number(value))}`
-                  }
-                />
-                {mode === 'percent' ? (
-                  <ReferenceLine
-                    y={0}
-                    stroke={tokens.color.textMuted}
-                    strokeWidth={2}
-                    ifOverflow="extendDomain"
-                    label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
+          <>
+            <div className={classes.chart}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData}>
+                  <CartesianGrid stroke={tokens.color.border} vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={30}
+                    tickFormatter={(value) => formatDateLabel(String(value))}
                   />
-                ) : null}
-                <Tooltip content={renderLineTooltip} />
-                <Legend />
-                {selected.map((stock, index) => {
-                  const focused = highlighted.includes(stock.ticker)
-                  return (
-                    <Area
-                      key={stock.ticker}
-                      type="monotone"
-                      dataKey={stock.ticker}
-                      name={stock.name}
-                      stroke={colors[index % colors.length]}
-                      fill={colors[index % colors.length]}
-                      fillOpacity={focused ? 0.14 : 0}
-                      strokeOpacity={hasFocusedStocks && !focused ? 0.2 : 1}
-                      strokeWidth={focused ? 4 : 2.25}
-                      activeDot={{ r: focused ? 6 : 4 }}
-                      dot={false}
-                      connectNulls
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    width={76}
+                    domain={mode === 'percent' ? [(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)] : ['auto', 'auto']}
+                    tickFormatter={(value) =>
+                      mode === 'percent'
+                        ? `${Number(value).toFixed(0)}%`
+                        : `₹${new Intl.NumberFormat('en-IN', { notation: 'compact' }).format(Number(value))}`
+                    }
+                  />
+                  {mode === 'percent' ? (
+                    <ReferenceLine
+                      y={0}
+                      stroke={tokens.color.textMuted}
+                      strokeWidth={2}
+                      ifOverflow="extendDomain"
+                      label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
                     />
-                  )
-                })}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+                  ) : null}
+                  {pinnedMoment ? (
+                    <ReferenceLine
+                      x={pinnedMoment.date}
+                      stroke={pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      label={{
+                        value: `${pinnedMoment.kind === 'drop' ? 'Drop' : 'High'} ${pinnedMoment.value > 0 ? '+' : ''}${pinnedMoment.value.toFixed(1)}%`,
+                        position: 'insideTopRight',
+                        fill: pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive,
+                        fontSize: 11,
+                      }}
+                    />
+                  ) : null}
+                  <Tooltip content={renderLineTooltip} />
+                  <Legend />
+                  {selected.map((stock, index) => {
+                    const focused = highlighted.includes(stock.ticker)
+                    return (
+                      <Area
+                        key={stock.ticker}
+                        type="monotone"
+                        dataKey={stock.ticker}
+                        name={stock.name}
+                        stroke={colors[index % colors.length]}
+                        fill={colors[index % colors.length]}
+                        fillOpacity={focused ? 0.14 : 0}
+                        strokeOpacity={hasFocusedStocks && !focused ? 0.2 : 1}
+                        strokeWidth={focused ? 4 : 2.25}
+                        activeDot={{ r: focused ? 6 : 4 }}
+                        dot={false}
+                        connectNulls
+                      />
+                    )
+                  })}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <MarketMomentsBar
+              moments={moments}
+              pinnedId={pinnedMomentId}
+              onPin={setPinnedMomentId}
+              emptyMessage={
+                rangeDays < 90
+                  ? 'Choose a range of at least 3 months to detect meaningful drops and highs.'
+                  : 'No separated drop or high above 3% was found in this range.'
+              }
+            />
+          </>
         ) : (
           <div className={classes.chartEmpty}>
             {refreshing ? 'Loading market prices...' : selected.length ? 'No prices available for this range.' : 'Add stocks to compare.'}

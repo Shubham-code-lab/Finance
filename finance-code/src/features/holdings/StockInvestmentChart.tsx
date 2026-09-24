@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import { Chip, ToggleButton, ToggleButtonGroup } from '@mui/material'
@@ -25,6 +25,8 @@ import { Card, MoneyText } from '@/components/ui'
 import { formatDateLabel, todayIso } from '@/domain/money'
 import { Holding, StoreData } from '@/domain/types'
 import { InvestmentSectorTooltip } from '@/features/holdings/InvestmentSectorTooltip'
+import { MarketMomentsBar } from '@/features/holdings/MarketMomentsBar'
+import { equalWeightPerformance, findMarketMoments } from '@/features/holdings/marketMoments'
 import { getMarketSymbolProfile } from '@/market/stockQuotes'
 import { formatPrivateNumber, usePrivacy } from '@/privacy/privacy'
 import { useStockCloses } from '@/query/useStockCloses'
@@ -50,13 +52,14 @@ const useStyles = createUseStyles({
   chips: { display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' },
   chip: {
     height: '26px !important',
+    borderRadius: `${tokens.radius.sm}px !important`,
     background: `${tokens.color.bgMuted} !important`,
     color: `${tokens.color.text} !important`,
     cursor: 'pointer',
     '& .MuiChip-label': { padding: '0 7px', fontSize: tokens.font.sizeXs },
     '& .MuiChip-icon': { fontSize: '16px !important' },
   },
-  chipOff: { opacity: 0.55, borderColor: `${tokens.color.border} !important` },
+  chipFocused: { background: `${tokens.color.accentSoft} !important` },
   chart: { height: 380, minWidth: 0, '@media (max-width: 720px)': { height: 330 } },
   empty: { padding: tokens.space.xl, color: tokens.color.textMuted, textAlign: 'center' },
   error: { color: tokens.color.negative, fontSize: tokens.font.sizeSm },
@@ -102,8 +105,9 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
   const earliest = holdings.map((holding) => holding.buyDate ?? today).sort()[0] ?? today
   const [range, setRange] = useState({ from: earliest, to: today })
   const [mode, setMode] = useState<ChartMode>('value')
-  const [selectedIds, setSelectedIds] = useState(() => holdings.map((holding) => holding.id))
-  const selected = useMemo(() => holdings.filter((holding) => selectedIds.includes(holding.id)), [holdings, selectedIds])
+  const [highlightedIds, setHighlightedIds] = useState<string[]>([])
+  const [pinnedMomentId, setPinnedMomentId] = useState<string | null>(null)
+  const selected = holdings
   const quotes = useStockCloses(selected, today)
   const results = quotes.data ?? {}
   const profiles = useQueries({
@@ -158,6 +162,30 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
       return row
     })
   }, [mode, range, results, selected])
+  const investmentPerformance = useMemo(
+    () =>
+      equalWeightPerformance(
+        selected.map((holding) => ({
+          id: holding.id,
+          points: (results[holding.id]?.closes ?? [])
+            .filter((point) => point.date >= range.from && point.date <= range.to)
+            .map((point) => ({ date: point.date, value: point.closeMinor })),
+        })),
+      ),
+    [range.from, range.to, results, selected],
+  )
+  const moments = useMemo(() => findMarketMoments(investmentPerformance), [investmentPerformance])
+  const pinnedMoment = moments.find((moment) => moment.id === pinnedMomentId) ?? null
+  const rangeDays = Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000)
+  const hasFocusedStocks = highlightedIds.length > 0
+
+  useEffect(() => {
+    setHighlightedIds((current) => current.filter((id) => holdings.some((holding) => holding.id === id)))
+  }, [holdings])
+
+  useEffect(() => {
+    if (pinnedMomentId && !moments.some((moment) => moment.id === pinnedMomentId)) setPinnedMomentId(null)
+  }, [moments, pinnedMomentId])
 
   const tableRows = selected.map((holding) => {
     const closes = (results[holding.id]?.closes ?? []).filter((point) => point.date >= range.from && point.date <= range.to)
@@ -190,7 +218,7 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
   }, [profiles, range, results, selected])
 
   const toggleStock = (id: string) =>
-    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+    setHighlightedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
   const errors = selected.flatMap((holding) => (results[holding.id]?.error ? [results[holding.id].error] : []))
   const tooltipKind = mode === 'percent' ? 'percent' : 'money'
 
@@ -221,12 +249,12 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
         </div>
         <div className={classes.chips}>
           {holdings.map((holding, index) => {
-            const active = selectedIds.includes(holding.id)
+            const active = highlightedIds.includes(holding.id)
             return (
               <Chip
                 key={holding.id}
                 size="small"
-                className={`${classes.chip} ${seriesClasses[`series${index % colors.length}`]} ${active ? '' : classes.chipOff}`}
+                className={`${classes.chip} ${seriesClasses[`series${index % colors.length}`]} ${active ? classes.chipFocused : ''}`}
                 label={`${holding.name}  ${holding.ticker}`}
                 icon={active ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
                 variant="outlined"
@@ -244,58 +272,85 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
         {quotes.isLoading ? (
           <div className={classes.empty}>Loading investment history…</div>
         ) : chartData.length ? (
-          <div className={classes.chart}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid stroke={tokens.color.border} vertical={false} />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} tickFormatter={formatDateLabel} />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  width={88}
-                  domain={mode === 'percent' ? [(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)] : ['auto', 'auto']}
-                  tickFormatter={(value) =>
-                    mode === 'percent' ? `${Number(value).toFixed(0)}%` : formatPrivateNumber(Number(value), masked)
-                  }
-                />
-                {mode === 'percent' ? (
-                  <ReferenceLine
-                    y={0}
-                    stroke={tokens.color.textMuted}
-                    strokeWidth={2}
-                    ifOverflow="extendDomain"
-                    label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
+          <>
+            <div className={classes.chart}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid stroke={tokens.color.border} vertical={false} />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} tickFormatter={formatDateLabel} />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    width={88}
+                    domain={mode === 'percent' ? [(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)] : ['auto', 'auto']}
+                    tickFormatter={(value) =>
+                      mode === 'percent' ? `${Number(value).toFixed(0)}%` : formatPrivateNumber(Number(value), masked)
+                    }
                   />
-                ) : null}
-                <Tooltip
-                  content={<ChartTooltip labelKind="date" valueKind={tooltipKind} />}
-                  cursor={{ stroke: tokens.color.borderStrong, strokeDasharray: '4 4' }}
-                />
-                <Legend />
-                {mode === 'value' ? (
-                  <Line dataKey="total" name="Portfolio total" stroke={tokens.color.accent} strokeWidth={3} dot={false} connectNulls />
-                ) : null}
-                {selected.map((holding) => {
-                  const index = holdings.findIndex((item) => item.id === holding.id)
-                  return (
-                    <Line
-                      key={holding.id}
-                      dataKey={holding.id}
-                      name={holding.name}
-                      stroke={colors[index % colors.length]}
+                  {mode === 'percent' ? (
+                    <ReferenceLine
+                      y={0}
+                      stroke={tokens.color.textMuted}
                       strokeWidth={2}
-                      dot={false}
-                      connectNulls
+                      ifOverflow="extendDomain"
+                      label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
                     />
-                  )
-                })}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+                  ) : null}
+                  {pinnedMoment ? (
+                    <ReferenceLine
+                      x={pinnedMoment.date}
+                      stroke={pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      label={{
+                        value: `${pinnedMoment.kind === 'drop' ? 'Drop' : 'High'} ${pinnedMoment.value > 0 ? '+' : ''}${pinnedMoment.value.toFixed(1)}%`,
+                        position: 'insideTopRight',
+                        fill: pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive,
+                        fontSize: 11,
+                      }}
+                    />
+                  ) : null}
+                  <Tooltip
+                    content={<ChartTooltip labelKind="date" valueKind={tooltipKind} />}
+                    cursor={{ stroke: tokens.color.borderStrong, strokeDasharray: '4 4' }}
+                  />
+                  <Legend />
+                  {mode === 'value' ? (
+                    <Line dataKey="total" name="Portfolio total" stroke={tokens.color.accent} strokeWidth={3} dot={false} connectNulls />
+                  ) : null}
+                  {selected.map((holding) => {
+                    const index = holdings.findIndex((item) => item.id === holding.id)
+                    const focused = highlightedIds.includes(holding.id)
+                    return (
+                      <Line
+                        key={holding.id}
+                        dataKey={holding.id}
+                        name={holding.name}
+                        stroke={colors[index % colors.length]}
+                        strokeOpacity={hasFocusedStocks && !focused ? 0.2 : 1}
+                        strokeWidth={focused ? 4 : 2.25}
+                        activeDot={{ r: focused ? 6 : 4 }}
+                        dot={false}
+                        connectNulls
+                      />
+                    )
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <MarketMomentsBar
+              moments={moments}
+              pinnedId={pinnedMomentId}
+              onPin={setPinnedMomentId}
+              emptyMessage={
+                rangeDays < 90
+                  ? 'Choose a range of at least 3 months to detect meaningful drops and highs.'
+                  : 'No separated drop or high above 3% was found in this range.'
+              }
+            />
+          </>
         ) : (
-          <div className={classes.empty}>
-            {selected.length ? 'No market prices are available in this date range.' : 'Select at least one stock to display the graph.'}
-          </div>
+          <div className={classes.empty}>No market prices are available in this date range.</div>
         )}
       </Card>
 

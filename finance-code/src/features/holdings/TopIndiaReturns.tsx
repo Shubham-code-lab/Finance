@@ -11,6 +11,8 @@ import { DateRangeValue, isValidDateRange } from '@/components/dateRange'
 import { PanelSkeleton } from '@/components/PanelSkeleton'
 import { Button, Card, Input } from '@/components/ui'
 import { formatDateLabel, formatMoney, todayIso } from '@/domain/money'
+import { MarketMomentsBar } from '@/features/holdings/MarketMomentsBar'
+import { equalWeightPerformance, findMarketMoments } from '@/features/holdings/marketMoments'
 import { rankIndiaReturns } from '@/features/holdings/topIndiaReturns.utils'
 import { getNifty500Constituents } from '@/market/indiaUniverse'
 import { getMarketBatchDailyCloses } from '@/market/stockQuotes'
@@ -132,6 +134,7 @@ export function TopIndiaReturns() {
   const [countInput, setCountInput] = useState(String(initial.count))
   const [appliedRange, setAppliedRange] = useState<DateRangeValue | null>(null)
   const [searchVersion, setSearchVersion] = useState(0)
+  const [pinnedMomentId, setPinnedMomentId] = useState<string | null>(null)
   const validRange = Boolean(range.from && range.to && isValidDateRange(range))
   const searchedRange = appliedRange ?? range
 
@@ -196,6 +199,23 @@ export function TopIndiaReturns() {
     )
     return [...rows.values()].sort((left, right) => String(left.date).localeCompare(String(right.date)))
   }, [ranked])
+  const rankedPerformance = useMemo(
+    () =>
+      equalWeightPerformance(
+        ranked.map((stock) => ({
+          id: stock.ticker,
+          points: stock.closes.map((close) => ({ date: close.date, value: close.closeMinor })),
+        })),
+      ),
+    [ranked],
+  )
+  const moments = useMemo(() => findMarketMoments(rankedPerformance), [rankedPerformance])
+  const pinnedMoment = moments.find((moment) => moment.id === pinnedMomentId) ?? null
+  const rangeDays = Math.round((Date.parse(`${searchedRange.to}T00:00:00Z`) - Date.parse(`${searchedRange.from}T00:00:00Z`)) / 86_400_000)
+
+  useEffect(() => {
+    if (pinnedMomentId && !moments.some((moment) => moment.id === pinnedMomentId)) setPinnedMomentId(null)
+  }, [moments, pinnedMomentId])
 
   return (
     <div className={classes.root}>
@@ -264,47 +284,73 @@ export function TopIndiaReturns() {
         ) : universeQuery.isPending || historyQuery.isPending ? (
           <PanelSkeleton />
         ) : chartData.length ? (
-          <div className={classes.chart}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid stroke={tokens.color.border} vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tickLine={false}
-                  axisLine={false}
-                  minTickGap={30}
-                  tickFormatter={(value) => formatDateLabel(String(value))}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  width={72}
-                  domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]}
-                  tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
-                />
-                <ReferenceLine
-                  y={0}
-                  stroke={tokens.color.textMuted}
-                  strokeWidth={2}
-                  ifOverflow="extendDomain"
-                  label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
-                />
-                <Tooltip content={<ChartTooltip labelKind="date" valueKind="percent" />} cursor={{ stroke: tokens.color.borderStrong }} />
-                <Legend />
-                {ranked.map((stock, index) => (
-                  <Line
-                    key={stock.ticker}
-                    dataKey={stock.ticker}
-                    name={stock.name}
-                    stroke={colors[index % colors.length]}
-                    strokeWidth={2.4}
-                    dot={false}
-                    connectNulls
+          <>
+            <div className={classes.chart}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid stroke={tokens.color.border} vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={30}
+                    tickFormatter={(value) => formatDateLabel(String(value))}
                   />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    width={72}
+                    domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]}
+                    tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+                  />
+                  <ReferenceLine
+                    y={0}
+                    stroke={tokens.color.textMuted}
+                    strokeWidth={2}
+                    ifOverflow="extendDomain"
+                    label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
+                  />
+                  {pinnedMoment ? (
+                    <ReferenceLine
+                      x={pinnedMoment.date}
+                      stroke={pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      label={{
+                        value: `${pinnedMoment.kind === 'drop' ? 'Drop' : 'High'} ${pinnedMoment.value > 0 ? '+' : ''}${pinnedMoment.value.toFixed(1)}%`,
+                        position: 'insideTopRight',
+                        fill: pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive,
+                        fontSize: 11,
+                      }}
+                    />
+                  ) : null}
+                  <Tooltip content={<ChartTooltip labelKind="date" valueKind="percent" />} cursor={{ stroke: tokens.color.borderStrong }} />
+                  <Legend />
+                  {ranked.map((stock, index) => (
+                    <Line
+                      key={stock.ticker}
+                      dataKey={stock.ticker}
+                      name={stock.name}
+                      stroke={colors[index % colors.length]}
+                      strokeWidth={2.4}
+                      dot={false}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <MarketMomentsBar
+              moments={moments}
+              pinnedId={pinnedMomentId}
+              onPin={setPinnedMomentId}
+              emptyMessage={
+                rangeDays < 90
+                  ? 'Choose a range of at least 3 months to detect meaningful drops and highs.'
+                  : 'No separated drop or high above 3% was found in this range.'
+              }
+            />
+          </>
         ) : (
           <div className={classes.empty}>No stocks have complete market history for this range.</div>
         )}
