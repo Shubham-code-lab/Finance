@@ -121,12 +121,37 @@ VITE_FIREBASE_PROJECT_ID=your-project
 VITE_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_web_app_id
+VITE_QUOTE_PROXY=
 VITE_NSE_PROXY=
 ```
 
 The local `.env` file is ignored by Git and must not be committed.
 
 `VITE_NSE_PROXY` is optional. When empty, Finance requests the Nifty 500 CSV directly from NSE. Configure it only if a deployed browser request is blocked and a trusted proxy has been created.
+
+`VITE_QUOTE_PROXY` is the base URL of the production Yahoo Finance proxy. It can remain empty locally because the Vite development server proxies `/market/yahoo`. The GitHub Pages build sets it to the deployed Cloudflare Worker URL.
+
+### Yahoo Finance production proxy
+
+Yahoo Finance does not include an `Access-Control-Allow-Origin` response header for the search, chart, or fundamentals endpoints used by Finance. A browser therefore blocks direct requests from GitHub Pages even when Yahoo returns HTTP 200. Command-line tools such as `curl` are not subject to browser CORS enforcement.
+
+GitHub Pages cannot run a server-side proxy. Finance uses a Cloudflare Worker whose source is stored in `cloudflare-worker/yahoo-proxy.js`. The Worker:
+
+- accepts the GitHub Pages origin;
+- permits only `GET` and CORS preflight requests;
+- allowlists the three Yahoo endpoint families used by the application;
+- forwards no Firebase credentials or user finance data;
+- retries `query2.finance.yahoo.com` when `query1` returns HTTP 429;
+- caches successful Yahoo responses for five minutes;
+- adds the required CORS response headers.
+
+Opening the Worker's root URL returns `Yahoo endpoint not allowed` by design. Test an allowlisted route such as:
+
+```text
+WORKER_URL/v1/finance/search?q=Mahindra&quotesCount=12&newsCount=0
+```
+
+The production Worker URL is public configuration, not a secret. It is assigned to `VITE_QUOTE_PROXY` in `.github/workflows/publish.yml`. If the Worker URL changes, update that workflow and publish a new release.
 
 Run the application locally:
 
@@ -246,8 +271,8 @@ The workflow then:
 1. Checks out `main`.
 2. Reads the `publish` switch.
 3. Installs dependencies in `finance-code/`.
-4. Makes the six GitHub secrets available to Vite.
-5. Verifies none of those values is empty.
+4. Makes the Yahoo proxy URL and six GitHub secrets available to Vite.
+5. Verifies none of the Firebase values is empty.
 6. Builds with `BASE_PATH=/Finance/`.
 7. Removes the previous compiled root `assets/`, `index.html`, and `404.html`.
 8. Copies `finance-code/dist/` to the repository root.
@@ -354,6 +379,14 @@ Add `USERNAME.github.io` under **Firebase Authentication > Settings > Authorized
 
 Check that `BASE_PATH` exactly matches `/<repository-name>/` and includes both slashes.
 
+### Yahoo requests fail with a browser CORS error
+
+Do not call Yahoo directly from GitHub Pages and do not use `mode: "no-cors"`; an opaque response cannot be read as JSON. Confirm `VITE_QUOTE_PROXY` was present during the production build, then test the Worker's full `/v1/finance/search`, `/v8/finance/chart/...`, or fundamentals route. The Worker root is intentionally not a valid Yahoo endpoint.
+
+### Yahoo proxy returns HTTP 429
+
+Confirm the deployed Worker matches `cloudflare-worker/yahoo-proxy.js`. It sends browser-compatible headers and retries Yahoo's `query2` host when `query1` is rate-limited. Yahoo Finance is an unofficial dependency and may still impose rate limits or change behavior.
+
 ### Publish workflow cannot push to `main`
 
 Check workflow `contents: write` permission, repository Actions permissions, and branch rules. If `main` requires pull requests, configure a narrowly scoped GitHub Actions bypass for the generated site commit.
@@ -380,6 +413,7 @@ When copying this setup, change all project-specific values:
 4. The six GitHub repository secrets.
 5. Firebase authorized GitHub Pages hostname.
 6. Firestore rules, indexes, and collection paths.
-7. The live-site link in the README.
+7. The allowed GitHub Pages origin and deployed URL in the Yahoo proxy.
+8. The live-site link in the README.
 
 Keep source and generated output separate, and verify the generated HTML before considering the deployment complete.
