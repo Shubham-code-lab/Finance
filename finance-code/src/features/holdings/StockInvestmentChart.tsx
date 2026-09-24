@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useState } from 'react'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import { Chip, ToggleButton, ToggleButtonGroup } from '@mui/material'
@@ -7,9 +7,10 @@ import { createUseStyles } from 'react-jss'
 import {
   CartesianGrid,
   Cell,
+  Area,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   Pie,
   PieChart,
   ReferenceLine,
@@ -20,13 +21,14 @@ import {
 } from 'recharts'
 import { calculateStockPerformance, performanceHoldings } from '@/calc/stockPerformance'
 import { ChartTooltip } from '@/charts/ChartTooltip'
+import { sampleTimeSeries } from '@/charts/sampleTimeSeries'
+import { ChartSkeleton } from '@/components/ChartSkeleton'
 import { DateRangePicker } from '@/components/DateRangePicker'
 import { Card, MoneyText } from '@/components/ui'
 import { formatDateLabel, todayIso } from '@/domain/money'
 import { Holding, StoreData } from '@/domain/types'
 import { InvestmentSectorTooltip } from '@/features/holdings/InvestmentSectorTooltip'
-import { MarketMomentsBar } from '@/features/holdings/MarketMomentsBar'
-import { equalWeightPerformance, findMarketMoments } from '@/features/holdings/marketMoments'
+import { equalWeightPerformance, findMarketMoments, marketMovements } from '@/features/holdings/marketMoments'
 import { getMarketSymbolProfile } from '@/market/stockQuotes'
 import { formatPrivateNumber, usePrivacy } from '@/privacy/privacy'
 import { useStockCloses } from '@/query/useStockCloses'
@@ -46,7 +48,14 @@ const useStyles = createUseStyles({
   ...seriesColorStyles,
   root: { display: 'grid', gap: tokens.space.md },
   header: { display: 'flex', alignItems: 'end', justifyContent: 'space-between', gap: tokens.space.md, flexWrap: 'wrap' },
-  controls: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: tokens.space.sm, flexWrap: 'wrap' },
+  controls: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: tokens.space.sm,
+    flexWrap: 'wrap',
+    marginLeft: 'auto',
+  },
   title: { margin: 0, fontSize: tokens.font.sizeLg },
   copy: { margin: [tokens.space.xs, 0, 0], color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
   chips: { display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' },
@@ -104,9 +113,9 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
   const today = todayIso()
   const earliest = holdings.map((holding) => holding.buyDate ?? today).sort()[0] ?? today
   const [range, setRange] = useState({ from: earliest, to: today })
-  const [mode, setMode] = useState<ChartMode>('value')
+  const [mode, setMode] = useState<ChartMode>('percent')
   const [highlightedIds, setHighlightedIds] = useState<string[]>([])
-  const [pinnedMomentId, setPinnedMomentId] = useState<string | null>(null)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
   const selected = holdings
   const quotes = useStockCloses(selected, today)
   const results = quotes.data ?? {}
@@ -135,10 +144,12 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
       selected.map((holding) => {
         const allCloses = results[holding.id]?.closes ?? []
         const closes = allCloses.filter((point) => point.date >= range.from && point.date <= range.to)
-        const firstPrice = closes[0]?.closeMinor
         const purchasePrice = allCloses[0]?.closeMinor
         const quantity = holding.qty ?? (purchasePrice ? holding.investedMinor / purchasePrice : 0)
-        return [holding.id, { holding, firstPrice, quantity, closes: new Map(closes.map((point) => [point.date, point.closeMinor])) }]
+        return [
+          holding.id,
+          { holding, firstPrice: purchasePrice, quantity, closes: new Map(closes.map((point) => [point.date, point.closeMinor])) },
+        ]
       }),
     )
     return dates.map((date) => {
@@ -162,30 +173,41 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
       return row
     })
   }, [mode, range, results, selected])
+  const movementHoldings = useMemo(
+    () => (highlightedIds.length ? selected.filter((holding) => highlightedIds.includes(holding.id)) : selected),
+    [highlightedIds, selected],
+  )
   const investmentPerformance = useMemo(
     () =>
       equalWeightPerformance(
-        selected.map((holding) => ({
+        movementHoldings.map((holding) => ({
           id: holding.id,
+          weight: holding.investedMinor,
           points: (results[holding.id]?.closes ?? [])
-            .filter((point) => point.date >= range.from && point.date <= range.to)
+            .filter((point) => point.date <= range.to)
             .map((point) => ({ date: point.date, value: point.closeMinor })),
         })),
-      ),
-    [range.from, range.to, results, selected],
+      ).filter((point) => point.date >= range.from),
+    [movementHoldings, range.from, range.to, results],
   )
   const moments = useMemo(() => findMarketMoments(investmentPerformance), [investmentPerformance])
-  const pinnedMoment = moments.find((moment) => moment.id === pinnedMomentId) ?? null
-  const rangeDays = Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000)
-  const hasFocusedStocks = highlightedIds.length > 0
+  const movements = useMemo(() => marketMovements(investmentPerformance), [investmentPerformance])
+  const renderedChartData = useMemo(
+    () =>
+      sampleTimeSeries(
+        chartData,
+        600,
+        moments.map((moment) => moment.date),
+      ),
+    [chartData, moments],
+  )
+  const previewedId = hoveredId && holdings.some((holding) => holding.id === hoveredId) ? hoveredId : null
+  const effectiveHighlightedIds = previewedId ? [previewedId] : highlightedIds
+  const hasFocusedStocks = effectiveHighlightedIds.length > 0
 
   useEffect(() => {
     setHighlightedIds((current) => current.filter((id) => holdings.some((holding) => holding.id === id)))
   }, [holdings])
-
-  useEffect(() => {
-    if (pinnedMomentId && !moments.some((moment) => moment.id === pinnedMomentId)) setPinnedMomentId(null)
-  }, [moments, pinnedMomentId])
 
   const tableRows = selected.map((holding) => {
     const closes = (results[holding.id]?.closes ?? []).filter((point) => point.date >= range.from && point.date <= range.to)
@@ -226,10 +248,6 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
     <div className={classes.root}>
       <Card className={classes.root}>
         <div className={classes.header}>
-          <div>
-            <h2 className={classes.title}>My stock investments</h2>
-            <p className={classes.copy}>Select holdings to show or hide them on this graph. Remove holdings only from My investments.</p>
-          </div>
           <div className={classes.controls}>
             <ToggleButtonGroup
               exclusive
@@ -240,9 +258,9 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
               }}
               aria-label="Investment chart value"
             >
-              <ToggleButton value="value">Value</ToggleButton>
-              <ToggleButton value="price">Price</ToggleButton>
               <ToggleButton value="percent">Change %</ToggleButton>
+              <ToggleButton value="price">Price</ToggleButton>
+              <ToggleButton value="value">Value</ToggleButton>
             </ToggleButtonGroup>
             <DateRangePicker value={range} onChange={setRange} />
           </div>
@@ -259,6 +277,8 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
                 icon={active ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
                 variant="outlined"
                 onClick={() => toggleStock(holding.id)}
+                onMouseEnter={() => startTransition(() => setHoveredId(holding.id))}
+                onMouseLeave={() => startTransition(() => setHoveredId(null))}
               />
             )
           })}
@@ -270,12 +290,12 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
           </div>
         ) : null}
         {quotes.isLoading ? (
-          <div className={classes.empty}>Loading investment history…</div>
+          <ChartSkeleton />
         ) : chartData.length ? (
           <>
             <div className={classes.chart}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
+                <ComposedChart data={renderedChartData}>
                   <CartesianGrid stroke={tokens.color.border} vertical={false} />
                   <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} tickFormatter={formatDateLabel} />
                   <YAxis
@@ -296,58 +316,64 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
                       label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
                     />
                   ) : null}
-                  {pinnedMoment ? (
+                  {moments.map((moment) => (
                     <ReferenceLine
-                      x={pinnedMoment.date}
-                      stroke={pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
-                      strokeWidth={2}
-                      strokeDasharray="5 4"
-                      label={{
-                        value: `${pinnedMoment.kind === 'drop' ? 'Drop' : 'High'} ${pinnedMoment.value > 0 ? '+' : ''}${pinnedMoment.value.toFixed(1)}%`,
-                        position: 'insideTopRight',
-                        fill: pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive,
-                        fontSize: 11,
-                      }}
+                      key={moment.id}
+                      x={moment.date}
+                      stroke={moment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.7}
+                      strokeDasharray="4 4"
                     />
-                  ) : null}
+                  ))}
                   <Tooltip
-                    content={<ChartTooltip labelKind="date" valueKind={tooltipKind} />}
+                    content={
+                      <ChartTooltip
+                        labelKind="date"
+                        valueKind={tooltipKind}
+                        marketMovements={movements}
+                        visibleDataKeys={highlightedIds}
+                        movementBaseline="investment"
+                      />
+                    }
                     cursor={{ stroke: tokens.color.borderStrong, strokeDasharray: '4 4' }}
+                    isAnimationActive={false}
                   />
                   <Legend />
                   {mode === 'value' ? (
-                    <Line dataKey="total" name="Portfolio total" stroke={tokens.color.accent} strokeWidth={3} dot={false} connectNulls />
+                    <Line
+                      dataKey="total"
+                      name="Portfolio total"
+                      stroke={tokens.color.accent}
+                      strokeWidth={3}
+                      dot={false}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
                   ) : null}
                   {selected.map((holding) => {
                     const index = holdings.findIndex((item) => item.id === holding.id)
-                    const focused = highlightedIds.includes(holding.id)
+                    const focused = effectiveHighlightedIds.includes(holding.id)
                     return (
-                      <Line
+                      <Area
                         key={holding.id}
                         dataKey={holding.id}
                         name={holding.name}
                         stroke={colors[index % colors.length]}
+                        fill={colors[index % colors.length]}
+                        fillOpacity={focused ? 0.14 : 0}
                         strokeOpacity={hasFocusedStocks && !focused ? 0.2 : 1}
                         strokeWidth={focused ? 4 : 2.25}
                         activeDot={{ r: focused ? 6 : 4 }}
                         dot={false}
                         connectNulls
+                        isAnimationActive={false}
                       />
                     )
                   })}
-                </LineChart>
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
-            <MarketMomentsBar
-              moments={moments}
-              pinnedId={pinnedMomentId}
-              onPin={setPinnedMomentId}
-              emptyMessage={
-                rangeDays < 90
-                  ? 'Choose a range of at least 3 months to detect meaningful drops and highs.'
-                  : 'No separated drop or high above 3% was found in this range.'
-              }
-            />
           </>
         ) : (
           <div className={classes.empty}>No market prices are available in this date range.</div>
@@ -416,6 +442,7 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
                     innerRadius="42%"
                     outerRadius="76%"
                     paddingAngle={2}
+                    isAnimationActive={false}
                   >
                     {sectorData.map((sector, index) => (
                       <Cell key={sector.name} fill={colors[index % colors.length]} />

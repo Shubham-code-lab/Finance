@@ -4,6 +4,7 @@ import { formatPrivateMoney, usePrivacy } from '@/privacy/privacy'
 import { tokens } from '@/theme/tokens'
 
 type Entry = { color?: string; dataKey?: string | number; name?: string | number; value?: string | number }
+type MarketMovement = { date: string; kind: 'up' | 'down' | 'steady'; value: number }
 
 const useStyles = createUseStyles({
   root: {
@@ -14,6 +15,10 @@ const useStyles = createUseStyles({
     border: `1px solid ${tokens.color.borderStrong}`,
     borderRadius: tokens.radius.md,
     background: tokens.color.bgCard,
+    backgroundImage: 'none',
+    opacity: '1 !important',
+    isolation: 'isolate',
+    zIndex: 10,
     boxShadow: '0 18px 48px rgba(0, 0, 0, 0.42)',
   },
   label: { marginBottom: tokens.space.sm, color: tokens.color.textMuted, fontSize: tokens.font.sizeXs },
@@ -35,6 +40,16 @@ const useStyles = createUseStyles({
   positive: { color: tokens.color.positive },
   negative: { color: tokens.color.negative },
   steady: { color: tokens.color.textMuted },
+  movement: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: tokens.space.md,
+    marginBottom: tokens.space.sm,
+    paddingBottom: tokens.space.sm,
+    borderBottom: `1px dashed ${tokens.color.borderStrong}`,
+    fontSize: tokens.font.sizeXs,
+  },
+  movementLabel: { color: tokens.color.textMuted },
 })
 
 export function ChartTooltip({
@@ -43,21 +58,41 @@ export function ChartTooltip({
   payload,
   labelKind = 'month',
   valueKind = 'money',
+  marketMovements = [],
+  visibleDataKeys,
+  movementBaseline = 'range',
 }: {
   active?: boolean
   label?: string | number
   payload?: Entry[]
   labelKind?: 'date' | 'month' | 'plain'
   valueKind?: 'money' | 'percent'
+  marketMovements?: MarketMovement[]
+  visibleDataKeys?: Array<string | number>
+  movementBaseline?: 'investment' | 'range'
 }) {
   const classes = useStyles()
   const { masked } = usePrivacy()
   if (!active || !payload?.length) return null
   const formattedLabel =
     labelKind === 'date' ? formatDateLabel(String(label)) : labelKind === 'month' ? formatMonthLabel(String(label)) : String(label)
-  const entries = valueKind === 'percent' ? [...payload].sort((left, right) => Number(right.value) - Number(left.value)) : payload
+  const visible = visibleDataKeys?.length ? payload.filter((entry) => visibleDataKeys.includes(entry.dataKey ?? '')) : payload
+  const entries = valueKind === 'percent' ? [...visible].sort((left, right) => Number(right.value) - Number(left.value)) : visible
+  const movement = marketMovements.find((item) => item.date === String(label))
+  const baselineLabel = movementBaseline === 'investment' ? 'investment' : 'range start'
   return (
     <div className={classes.root}>
+      {movement ? (
+        <div className={classes.movement}>
+          <span className={classes.movementLabel}>
+            {movement.kind === 'up' ? 'Up' : movement.kind === 'down' ? 'Down' : 'No change'} since {baselineLabel}
+          </span>
+          <strong className={movement.kind === 'down' ? classes.negative : movement.kind === 'up' ? classes.positive : classes.steady}>
+            {movement.value > 0 ? '+' : ''}
+            {movement.value.toFixed(2)}%
+          </strong>
+        </div>
+      ) : null}
       <div className={classes.label}>{formattedLabel}</div>
       <div className={classes.rows}>
         {entries.map((entry, index) => {

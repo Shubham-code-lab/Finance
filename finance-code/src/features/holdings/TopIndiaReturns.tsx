@@ -8,16 +8,16 @@ import { createUseStyles } from 'react-jss'
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { DateRangePicker } from '@/components/DateRangePicker'
 import { DateRangeValue, isValidDateRange } from '@/components/dateRange'
-import { PanelSkeleton } from '@/components/PanelSkeleton'
+import { ChartSkeleton } from '@/components/ChartSkeleton'
 import { Button, Card, Input } from '@/components/ui'
 import { formatDateLabel, formatMoney, todayIso } from '@/domain/money'
-import { MarketMomentsBar } from '@/features/holdings/MarketMomentsBar'
-import { equalWeightPerformance, findMarketMoments } from '@/features/holdings/marketMoments'
+import { equalWeightPerformance, findMarketMoments, marketMovements } from '@/features/holdings/marketMoments'
 import { rankIndiaReturns } from '@/features/holdings/topIndiaReturns.utils'
 import { getNifty500Constituents } from '@/market/indiaUniverse'
 import { getMarketBatchDailyCloses } from '@/market/stockQuotes'
 import { tokens } from '@/theme/tokens'
 import { ChartTooltip } from '@/charts/ChartTooltip'
+import { sampleTimeSeries } from '@/charts/sampleTimeSeries'
 
 const colors = [
   '#8db7ff',
@@ -61,9 +61,16 @@ function readFilters() {
 
 const useStyles = createUseStyles({
   root: { display: 'grid', gap: tokens.space.md },
+  workspaceCard: {
+    boxSizing: 'border-box',
+    minHeight: 'calc(100dvh - 148px)',
+    display: 'flex',
+    flexDirection: 'column',
+    '@media (max-width: 720px)': { minHeight: 'calc(100dvh - 164px)' },
+  },
   header: {
     display: 'grid',
-    gridTemplateColumns: 'auto minmax(0, 1fr)',
+    gridTemplateColumns: 'minmax(0, 1fr)',
     alignItems: 'center',
     gap: tokens.space.xl,
     '@media (max-width: 1100px)': { gridTemplateColumns: '1fr' },
@@ -107,7 +114,16 @@ const useStyles = createUseStyles({
     '@media (max-width: 560px)': { width: '100%' },
   },
   chart: { height: 360, minHeight: 300, marginTop: tokens.space.md, '@media (max-width: 720px)': { height: 320 } },
-  empty: { minHeight: 280, display: 'grid', placeItems: 'center', color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
+  empty: {
+    minHeight: 280,
+    flex: 1,
+    display: 'grid',
+    placeItems: 'center',
+    padding: tokens.space.xl,
+    color: tokens.color.textMuted,
+    fontSize: tokens.font.sizeSm,
+    textAlign: 'center',
+  },
   grid: { overflowX: 'auto', marginTop: tokens.space.md, border: `1px solid ${tokens.color.border}`, borderRadius: tokens.radius.sm },
   table: { width: '100%', minWidth: 760, borderCollapse: 'collapse', fontSize: tokens.font.sizeSm },
   th: {
@@ -134,7 +150,6 @@ export function TopIndiaReturns() {
   const [countInput, setCountInput] = useState(String(initial.count))
   const [appliedRange, setAppliedRange] = useState<DateRangeValue | null>(null)
   const [searchVersion, setSearchVersion] = useState(0)
-  const [pinnedMomentId, setPinnedMomentId] = useState<string | null>(null)
   const validRange = Boolean(range.from && range.to && isValidDateRange(range))
   const searchedRange = appliedRange ?? range
 
@@ -210,18 +225,21 @@ export function TopIndiaReturns() {
     [ranked],
   )
   const moments = useMemo(() => findMarketMoments(rankedPerformance), [rankedPerformance])
-  const pinnedMoment = moments.find((moment) => moment.id === pinnedMomentId) ?? null
-  const rangeDays = Math.round((Date.parse(`${searchedRange.to}T00:00:00Z`) - Date.parse(`${searchedRange.from}T00:00:00Z`)) / 86_400_000)
-
-  useEffect(() => {
-    if (pinnedMomentId && !moments.some((moment) => moment.id === pinnedMomentId)) setPinnedMomentId(null)
-  }, [moments, pinnedMomentId])
+  const movements = useMemo(() => marketMovements(rankedPerformance), [rankedPerformance])
+  const renderedChartData = useMemo(
+    () =>
+      sampleTimeSeries(
+        chartData,
+        600,
+        moments.map((moment) => moment.date),
+      ),
+    [chartData, moments],
+  )
 
   return (
     <div className={classes.root}>
-      <Card>
+      <Card className={classes.workspaceCard}>
         <div className={classes.header}>
-          <h2 className={classes.title}>India top returns</h2>
           <form className={classes.filters} onSubmit={runSearch}>
             <div className={classes.dateFilter}>
               <DateRangePicker value={range} onChange={setRange} />
@@ -282,12 +300,12 @@ export function TopIndiaReturns() {
         {searchVersion === 0 ? (
           <div className={classes.empty}>Choose the stocks to scan, date range, and result count, then press Search.</div>
         ) : universeQuery.isPending || historyQuery.isPending ? (
-          <PanelSkeleton />
+          <ChartSkeleton compact />
         ) : chartData.length ? (
           <>
             <div className={classes.chart}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
+                <LineChart data={renderedChartData} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
                   <CartesianGrid stroke={tokens.color.border} vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -299,7 +317,7 @@ export function TopIndiaReturns() {
                   <YAxis
                     tickLine={false}
                     axisLine={false}
-                    width={72}
+                    width={60}
                     domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]}
                     tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
                   />
@@ -310,21 +328,21 @@ export function TopIndiaReturns() {
                     ifOverflow="extendDomain"
                     label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
                   />
-                  {pinnedMoment ? (
+                  {moments.map((moment) => (
                     <ReferenceLine
-                      x={pinnedMoment.date}
-                      stroke={pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
-                      strokeWidth={2}
-                      strokeDasharray="5 4"
-                      label={{
-                        value: `${pinnedMoment.kind === 'drop' ? 'Drop' : 'High'} ${pinnedMoment.value > 0 ? '+' : ''}${pinnedMoment.value.toFixed(1)}%`,
-                        position: 'insideTopRight',
-                        fill: pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive,
-                        fontSize: 11,
-                      }}
+                      key={moment.id}
+                      x={moment.date}
+                      stroke={moment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.7}
+                      strokeDasharray="4 4"
                     />
-                  ) : null}
-                  <Tooltip content={<ChartTooltip labelKind="date" valueKind="percent" />} cursor={{ stroke: tokens.color.borderStrong }} />
+                  ))}
+                  <Tooltip
+                    content={<ChartTooltip labelKind="date" valueKind="percent" marketMovements={movements} />}
+                    cursor={{ stroke: tokens.color.borderStrong }}
+                    isAnimationActive={false}
+                  />
                   <Legend />
                   {ranked.map((stock, index) => (
                     <Line
@@ -335,21 +353,12 @@ export function TopIndiaReturns() {
                       strokeWidth={2.4}
                       dot={false}
                       connectNulls
+                      isAnimationActive={false}
                     />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <MarketMomentsBar
-              moments={moments}
-              pinnedId={pinnedMomentId}
-              onPin={setPinnedMomentId}
-              emptyMessage={
-                rangeDays < 90
-                  ? 'Choose a range of at least 3 months to detect meaningful drops and highs.'
-                  : 'No separated drop or high above 3% was found in this range.'
-              }
-            />
           </>
         ) : (
           <div className={classes.empty}>No stocks have complete market history for this range.</div>

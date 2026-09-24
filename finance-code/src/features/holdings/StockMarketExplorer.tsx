@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import AddIcon from '@mui/icons-material/Add'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
@@ -45,11 +45,13 @@ import {
   type TooltipContentProps,
 } from 'recharts'
 import { DateRangePicker } from '@/components/DateRangePicker'
+import { sampleTimeSeries } from '@/charts/sampleTimeSeries'
+import { ChartSkeleton } from '@/components/ChartSkeleton'
+import { SkeletonBone } from '@/components/SkeletonBone'
 import { DateRangeValue, isValidDateRange } from '@/components/dateRange'
 import { Button, Card, Select } from '@/components/ui'
 import { formatDateLabel, formatMoney, todayIso } from '@/domain/money'
-import { MarketMomentsBar } from '@/features/holdings/MarketMomentsBar'
-import { equalWeightPerformance, findMarketMoments } from '@/features/holdings/marketMoments'
+import { equalWeightPerformance, findMarketMoments, marketMovements } from '@/features/holdings/marketMoments'
 import { recoverStockListState, SavedStockList, StockListSymbol } from '@/domain/stockLists'
 import {
   getSelectedMarketDailyCloses,
@@ -150,7 +152,6 @@ const useStyles = createUseStyles({
     gridTemplateColumns: 'minmax(220px, 1fr) 110px auto auto',
     gap: tokens.space.sm,
     alignItems: 'center',
-    marginTop: tokens.space.md,
     '@media (max-width: 900px)': {
       gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
       '& > form, & > :last-child': { gridColumn: '1 / -1' },
@@ -170,7 +171,6 @@ const useStyles = createUseStyles({
     '@media (max-width: 760px)': { gridTemplateColumns: '1fr 1fr', '& > :last-child': { gridColumn: '1 / -1' } },
     '@media (max-width: 520px)': { gridTemplateColumns: '1fr' },
   },
-  watchlistLabel: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs, gridColumn: '1 / -1' },
   watchlistDelete: { minWidth: '36px !important', width: 36, padding: '4px !important', color: `${tokens.color.negative} !important` },
   watchlistControls: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: tokens.space.xs },
   watchlistMenuButton: {
@@ -256,7 +256,7 @@ const useStyles = createUseStyles({
   error: { color: tokens.color.danger, fontSize: tokens.font.sizeSm, marginTop: tokens.space.sm },
   chart: { height: 360, minHeight: 300, marginTop: tokens.space.md, '@media (max-width: 720px)': { height: 320 } },
   chartEmpty: { height: 320, display: 'grid', placeItems: 'center', color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
-  tableWorkspace: { display: 'grid', gap: tokens.space.sm, marginTop: tokens.space.md, minWidth: 0 },
+  tableWorkspace: { display: 'grid', gap: tokens.space.sm, minWidth: 0 },
   tableToolbar: { display: 'flex', justifyContent: 'flex-end' },
   columnButton: { display: 'inline-flex', alignItems: 'center', gap: tokens.space.sm },
   columnPopover: {
@@ -384,6 +384,10 @@ const useStyles = createUseStyles({
     border: `1px solid ${tokens.color.borderStrong}`,
     borderRadius: tokens.radius.sm,
     background: tokens.color.bgCard,
+    backgroundImage: 'none',
+    opacity: '1 !important',
+    isolation: 'isolate',
+    zIndex: 10,
     boxShadow: tokens.shadow.card,
     padding: tokens.space.md,
     display: 'grid',
@@ -410,6 +414,15 @@ const useStyles = createUseStyles({
     fontVariantNumeric: 'tabular-nums',
   },
   tooltipStocks: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs, lineHeight: 1.4 },
+  tooltipMovement: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: tokens.space.md,
+    paddingBottom: tokens.space.sm,
+    borderBottom: `1px dashed ${tokens.color.borderStrong}`,
+    color: tokens.color.textMuted,
+    fontSize: tokens.font.sizeXs,
+  },
   modeBar: { display: 'flex', justifyContent: 'flex-start', alignItems: 'center' },
 })
 
@@ -503,12 +516,13 @@ export function StockMarketComparison({
   const [initialPreferences] = useState(readPreferences)
   const [selected, setSelected] = useState<MarketSymbol[]>(initialPreferences.selected)
   const [highlighted, setHighlighted] = useState<string[]>(initialPreferences.highlighted)
+  const [hoveredTicker, setHoveredTicker] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [debouncedInput, setDebouncedInput] = useState('')
   const [chosenResult, setChosenResult] = useState<MarketSymbolSearchResult | null>(null)
   const [exchange, setExchange] = useState<Exchange>(initialPreferences.exchange)
   const [range, setRange] = useState<DateRangeValue>(initialPreferences.range)
-  const [mode, setMode] = useState<ChartMode>(initialPreferences.mode)
+  const [mode, setMode] = useState<ChartMode>('percent')
   const [tableSort, setTableSort] = useState<TableSort>(initialPreferences.sort)
   const [visibleColumns, setVisibleColumns] = useState<TableColumnId[]>(initialPreferences.columns)
   const [columnAnchor, setColumnAnchor] = useState<HTMLElement | null>(null)
@@ -517,7 +531,6 @@ export function StockMarketComparison({
   const [activeWatchlistId, setActiveWatchlistId] = useState('')
   const [watchlistName, setWatchlistName] = useState('')
   const [watchlistError, setWatchlistError] = useState('')
-  const [pinnedMomentId, setPinnedMomentId] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
   const [pendingRemoval, setPendingRemoval] = useState<MarketSymbol | null>(null)
   const [inputError, setInputError] = useState('')
@@ -647,21 +660,20 @@ export function StockMarketComparison({
     () =>
       selected.map((stock) => ({
         stock,
-        query: quoteHistoryQuery,
         closes: quoteHistoryQuery.data?.[stock.ticker] ?? [],
       })),
-    [quoteHistoryQuery, selected],
+    [quoteHistoryQuery.data, selected],
   )
   const stockTableRows = useMemo(
     () =>
-      series.map(({ stock, closes, query }) => {
+      series.map(({ stock, closes }) => {
         const first = closes[0]
         const last = closes.at(-1)
         const change = first && last ? last.closeMinor - first.closeMinor : null
         const percent = change !== null && first ? change / first.closeMinor : null
         return {
           stock,
-          query,
+          loading: quoteHistoryQuery.isFetching,
           first,
           last,
           change,
@@ -669,7 +681,7 @@ export function StockMarketComparison({
           fundamentals: fundamentalQueries[selected.findIndex((item) => item.ticker === stock.ticker)]?.data ?? {},
         }
       }),
-    [fundamentalQueries, selected, series],
+    [fundamentalQueries, quoteHistoryQuery.isFetching, selected, series],
   )
   const sortedStockTableRows = useMemo(
     () =>
@@ -698,23 +710,31 @@ export function StockMarketComparison({
     })
     return [...rows.values()].sort((left, right) => String(left.date).localeCompare(String(right.date)))
   }, [mode, series])
+  const movementSeries = useMemo(
+    () => (highlighted.length ? series.filter(({ stock }) => highlighted.includes(stock.ticker)) : series),
+    [highlighted, series],
+  )
   const comparisonPerformance = useMemo(
     () =>
       equalWeightPerformance(
-        series.map(({ stock, closes }) => ({
+        movementSeries.map(({ stock, closes }) => ({
           id: stock.ticker,
           points: closes.map((close) => ({ date: close.date, value: close.closeMinor })),
         })),
       ),
-    [series],
+    [movementSeries],
   )
   const moments = useMemo(() => findMarketMoments(comparisonPerformance), [comparisonPerformance])
-  const pinnedMoment = moments.find((moment) => moment.id === pinnedMomentId) ?? null
-  const rangeDays = Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000)
-
-  useEffect(() => {
-    if (pinnedMomentId && !moments.some((moment) => moment.id === pinnedMomentId)) setPinnedMomentId(null)
-  }, [moments, pinnedMomentId])
+  const movements = useMemo(() => marketMovements(comparisonPerformance), [comparisonPerformance])
+  const renderedChartData = useMemo(
+    () =>
+      sampleTimeSeries(
+        chartData,
+        600,
+        moments.map((moment) => moment.date),
+      ),
+    [chartData, moments],
+  )
 
   const sectorData = useMemo(() => {
     const grouped = new Map<string, MarketSymbol[]>()
@@ -842,8 +862,13 @@ export function StockMarketComparison({
   const errors = quoteHistoryQuery.error
     ? [quoteHistoryQuery.error instanceof Error ? quoteHistoryQuery.error.message : 'Price request failed.']
     : []
-  const firstPrices = Object.fromEntries(series.map(({ stock, closes }) => [stock.ticker, (closes[0]?.closeMinor ?? 0) / 100]))
-  const hasFocusedStocks = highlighted.length > 0
+  const firstPrices = useMemo(
+    () => Object.fromEntries(series.map(({ stock, closes }) => [stock.ticker, (closes[0]?.closeMinor ?? 0) / 100])),
+    [series],
+  )
+  const previewedTicker = hoveredTicker && selected.some((stock) => stock.ticker === hoveredTicker) ? hoveredTicker : null
+  const effectiveHighlighted = previewedTicker ? [previewedTicker] : highlighted
+  const hasFocusedStocks = effectiveHighlighted.length > 0
 
   const toggleHighlight = (ticker: string) => {
     setHighlighted((current) => (current.includes(ticker) ? current.filter((item) => item !== ticker) : [...current, ticker]))
@@ -924,7 +949,19 @@ export function StockMarketComparison({
   }
 
   const renderColumnValue = (column: TableColumnId, row: (typeof stockTableRows)[number], index: number) => {
-    const { stock, query, first, last, change, percent, fundamentals } = row
+    const { stock, loading, first, last, change, percent, fundamentals } = row
+    if (
+      loading &&
+      !first &&
+      (column === 'from' ||
+        column === 'startPrice' ||
+        column === 'to' ||
+        column === 'currentPrice' ||
+        column === 'change' ||
+        column === 'rangeReturn')
+    ) {
+      return <SkeletonBone width="70" height="16" />
+    }
     switch (column) {
       case 'serial':
         return index + 1
@@ -945,7 +982,7 @@ export function StockMarketComparison({
       case 'currentPrice':
         return last ? formatMoney(last.closeMinor, 'INR', true) : '-'
       case 'change':
-        return change === null ? (query.isFetching ? 'Loading' : '-') : `${change >= 0 ? '+' : ''}${formatMoney(change, 'INR', true)}`
+        return change === null ? (loading ? 'Loading' : '-') : `${change >= 0 ? '+' : ''}${formatMoney(change, 'INR', true)}`
       case 'rangeReturn':
         return percent === null ? '-' : `${percent >= 0 ? '+' : ''}${(percent * 100).toFixed(2)}%`
       case 'marketCap':
@@ -982,7 +1019,8 @@ export function StockMarketComparison({
 
   const renderLineTooltip = ({ active, label, payload }: TooltipContentProps) => {
     if (!active || !payload?.length) return null
-    const orderedPayload = [...payload].sort((left, right) => {
+    const visiblePayload = highlighted.length ? payload.filter((entry) => highlighted.includes(String(entry.dataKey ?? ''))) : payload
+    const orderedPayload = [...visiblePayload].sort((left, right) => {
       const leftTicker = String(left.dataKey ?? '')
       const rightTicker = String(right.dataKey ?? '')
       const leftValue = Number(left.value)
@@ -993,8 +1031,18 @@ export function StockMarketComparison({
       const rightChange = mode === 'percent' ? rightValue : rightBaseline ? (rightValue / rightBaseline - 1) * 100 : 0
       return rightChange - leftChange
     })
+    const movement = movements.find((item) => item.date === String(label))
     return (
       <div className={classes.tooltip}>
+        {movement ? (
+          <div className={classes.tooltipMovement}>
+            <span>{movement.kind === 'up' ? 'Up' : movement.kind === 'down' ? 'Down' : 'No change'} since range start</span>
+            <strong className={movement.kind === 'down' ? classes.negative : movement.kind === 'up' ? classes.positive : classes.pending}>
+              {movement.value > 0 ? '+' : ''}
+              {movement.value.toFixed(2)}%
+            </strong>
+          </div>
+        ) : null}
         <div className={classes.tooltipDate}>{formatDateLabel(String(label))}</div>
         {orderedPayload.map((entry) => {
           const ticker = String(entry.dataKey ?? '')
@@ -1083,10 +1131,6 @@ export function StockMarketComparison({
   return (
     <div className={classes.root}>
       <Card>
-        <div className={classes.header}>
-          <h2 className={classes.title}>Market comparison</h2>
-          <span className={classes.source}>{refreshing ? 'Updating market prices...' : 'Yahoo Finance daily close'}</span>
-        </div>
         <div className={classes.filters}>
           <form className={classes.searchForm} onSubmit={addStock}>
             <Autocomplete
@@ -1167,9 +1211,6 @@ export function StockMarketComparison({
           <DateRangePicker value={range} onChange={setRange} />
         </div>
         <form className={classes.watchlistBar} onSubmit={saveWatchlist}>
-          <span className={classes.watchlistLabel}>
-            Watchlists replace only the selected stocks. Your range, chart, sort, and columns stay as they are.
-          </span>
           <Select aria-label="Choose watchlist" value={activeWatchlistId} onChange={(event) => chooseWatchlist(event.target.value)}>
             <option value="">New / choose watchlist</option>
             {watchlists.map((watchlist) => (
@@ -1255,6 +1296,8 @@ export function StockMarketComparison({
               icon={highlighted.includes(stock.ticker) ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
               variant="outlined"
               onClick={() => toggleHighlight(stock.ticker)}
+              onMouseEnter={() => startTransition(() => setHoveredTicker(stock.ticker))}
+              onMouseLeave={() => startTransition(() => setHoveredTicker(null))}
               deleteIcon={<CloseIcon />}
               onDelete={(event) => {
                 event.stopPropagation()
@@ -1267,11 +1310,13 @@ export function StockMarketComparison({
         {inputError ? <div className={classes.error}>{inputError}</div> : null}
         {!validRange ? <div className={classes.error}>Select a valid start and end date.</div> : null}
         {errors.length ? <div className={classes.error}>{errors.join(' | ')}</div> : null}
-        {chartData.length ? (
+        {refreshing && !chartData.length ? (
+          <ChartSkeleton compact />
+        ) : chartData.length ? (
           <>
             <div className={classes.chart}>
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData}>
+                <ComposedChart data={renderedChartData} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
                   <CartesianGrid stroke={tokens.color.border} vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -1283,7 +1328,7 @@ export function StockMarketComparison({
                   <YAxis
                     tickLine={false}
                     axisLine={false}
-                    width={76}
+                    width={64}
                     domain={mode === 'percent' ? [(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)] : ['auto', 'auto']}
                     tickFormatter={(value) =>
                       mode === 'percent'
@@ -1300,24 +1345,20 @@ export function StockMarketComparison({
                       label={{ value: '0', position: 'insideLeft', fill: tokens.color.textMuted, fontSize: 11 }}
                     />
                   ) : null}
-                  {pinnedMoment ? (
+                  {moments.map((moment) => (
                     <ReferenceLine
-                      x={pinnedMoment.date}
-                      stroke={pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
-                      strokeWidth={2}
-                      strokeDasharray="5 4"
-                      label={{
-                        value: `${pinnedMoment.kind === 'drop' ? 'Drop' : 'High'} ${pinnedMoment.value > 0 ? '+' : ''}${pinnedMoment.value.toFixed(1)}%`,
-                        position: 'insideTopRight',
-                        fill: pinnedMoment.kind === 'drop' ? tokens.color.negative : tokens.color.positive,
-                        fontSize: 11,
-                      }}
+                      key={moment.id}
+                      x={moment.date}
+                      stroke={moment.kind === 'drop' ? tokens.color.negative : tokens.color.positive}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.7}
+                      strokeDasharray="4 4"
                     />
-                  ) : null}
-                  <Tooltip content={renderLineTooltip} />
+                  ))}
+                  <Tooltip content={renderLineTooltip} isAnimationActive={false} />
                   <Legend />
                   {selected.map((stock, index) => {
-                    const focused = highlighted.includes(stock.ticker)
+                    const focused = effectiveHighlighted.includes(stock.ticker)
                     return (
                       <Area
                         key={stock.ticker}
@@ -1332,29 +1373,20 @@ export function StockMarketComparison({
                         activeDot={{ r: focused ? 6 : 4 }}
                         dot={false}
                         connectNulls
+                        isAnimationActive={false}
                       />
                     )
                   })}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
-            <MarketMomentsBar
-              moments={moments}
-              pinnedId={pinnedMomentId}
-              onPin={setPinnedMomentId}
-              emptyMessage={
-                rangeDays < 90
-                  ? 'Choose a range of at least 3 months to detect meaningful drops and highs.'
-                  : 'No separated drop or high above 3% was found in this range.'
-              }
-            />
           </>
         ) : (
-          <div className={classes.chartEmpty}>
-            {refreshing ? 'Loading market prices...' : selected.length ? 'No prices available for this range.' : 'Add stocks to compare.'}
-          </div>
+          <div className={classes.chartEmpty}>{selected.length ? 'No prices available for this range.' : 'Add stocks to compare.'}</div>
         )}
-        {selected.length ? (
+      </Card>
+      {selected.length ? (
+        <Card>
           <div className={classes.tableWorkspace}>
             <div className={classes.tableToolbar}>
               <Button
@@ -1439,8 +1471,8 @@ export function StockMarketComparison({
               )}
             </div>
           </div>
-        ) : null}
-      </Card>
+        </Card>
+      ) : null}
       <Card>
         <div className={classes.header}>
           <h2 className={classes.title}>Sector diversification</h2>
@@ -1460,6 +1492,7 @@ export function StockMarketComparison({
                     innerRadius="38%"
                     outerRadius="82%"
                     paddingAngle={2}
+                    isAnimationActive={false}
                   >
                     {sectorData.map((sector, index) => (
                       <Cell key={sector.name} fill={colors[index % colors.length]} />

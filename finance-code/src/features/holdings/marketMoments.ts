@@ -1,6 +1,7 @@
 export type MarketPoint = { date: string; value: number }
-export type MarketSeries = { id: string; points: MarketPoint[] }
+export type MarketSeries = { id: string; points: MarketPoint[]; weight?: number }
 export type MarketMoment = { id: string; kind: 'drop' | 'high'; date: string; value: number }
+export type MarketMovement = { date: string; kind: 'up' | 'down' | 'steady'; value: number }
 
 function daysBetween(from: string, to: string) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
@@ -23,12 +24,23 @@ export function equalWeightPerformance(series: MarketSeries[]): MarketPoint[] {
     const changes = usable.flatMap((item) => {
       const value = latest.get(item.id)
       const baseline = baselines.get(item.id)
-      return value !== undefined && baseline ? [(value / baseline - 1) * 100] : []
+      return value !== undefined && baseline
+        ? [{ value: (value / baseline - 1) * 100, weight: item.weight && item.weight > 0 ? item.weight : 1 }]
+        : []
     })
     if (!changes.length) return []
-    const average = changes.reduce((sum, value) => sum + value, 0) / changes.length
+    const totalWeight = changes.reduce((sum, item) => sum + item.weight, 0)
+    const average = changes.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight
     return [{ date, value: Math.abs(average) < 1e-10 ? 0 : average }]
   })
+}
+
+export function marketMovements(points: MarketPoint[]): MarketMovement[] {
+  return points.map((point) => ({
+    date: point.date,
+    kind: point.value > 1e-10 ? 'up' : point.value < -1e-10 ? 'down' : 'steady',
+    value: point.value,
+  }))
 }
 
 function separated<T extends { index: number }>(items: T[], count: number, minimumGap: number) {

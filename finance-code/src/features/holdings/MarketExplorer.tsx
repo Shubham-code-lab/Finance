@@ -1,7 +1,7 @@
-import { lazy, startTransition, Suspense, useState } from 'react'
+import { lazy, startTransition, Suspense, useMemo, useState } from 'react'
 import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 import { createUseStyles } from 'react-jss'
-import { DataPageSkeleton } from '@/components/DataPageSkeleton'
+import { MarketTabSkeleton } from '@/components/MarketTabSkeleton'
 import { tokens } from '@/theme/tokens'
 import { StoreData } from '@/domain/types'
 
@@ -20,7 +20,14 @@ const workspaceKey = 'finance:stock-market-workspace:v1'
 
 const useStyles = createUseStyles({
   root: { display: 'grid', gap: tokens.space.md },
-  modeBar: { display: 'flex', justifyContent: 'flex-start', alignItems: 'center' },
+  modeBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: tokens.space.md,
+    flexWrap: 'wrap',
+  },
+  title: { margin: 0, fontSize: 24, lineHeight: 1.25, fontWeight: tokens.font.weightMedium },
 })
 
 type Workspace = 'custom' | 'top-india' | 'investments' | 'funds'
@@ -41,6 +48,20 @@ export function MarketExplorer({ portfolioStatus, data }: { portfolioStatus?: st
     investments: workspace === 'investments',
     funds: workspace === 'funds',
   }))
+  const recoverySymbols = useMemo(
+    () =>
+      data.holdings.flatMap((holding) =>
+        holding.kind === 'stock' && holding.ticker ? [{ name: holding.name, ticker: holding.ticker }] : [],
+      ),
+    [data.holdings],
+  )
+  const customWorkspace = useMemo(
+    () => <StockMarketComparison portfolioStatus={portfolioStatus} recoverySymbols={recoverySymbols} />,
+    [portfolioStatus, recoverySymbols],
+  )
+  const topIndiaWorkspace = useMemo(() => <TopIndiaReturns />, [])
+  const investmentsWorkspace = useMemo(() => <StockInvestmentChart data={data} />, [data])
+  const fundsWorkspace = useMemo(() => <MutualFundInvestmentChart data={data} />, [data])
 
   const switchWorkspace = (next: Workspace) => {
     startTransition(() => {
@@ -63,6 +84,7 @@ export function MarketExplorer({ portfolioStatus, data }: { portfolioStatus?: st
   return (
     <div className={classes.root}>
       <div className={classes.modeBar}>
+        <h1 className={classes.title}>Stocks</h1>
         <ToggleButtonGroup
           exclusive
           size="small"
@@ -78,32 +100,11 @@ export function MarketExplorer({ portfolioStatus, data }: { portfolioStatus?: st
           <ToggleButton value="funds">Mutual funds</ToggleButton>
         </ToggleButtonGroup>
       </div>
-      <Suspense fallback={<DataPageSkeleton />}>
-        {mountedWorkspaces.custom ? (
-          <div hidden={workspace !== 'custom'}>
-            <StockMarketComparison
-              portfolioStatus={portfolioStatus}
-              recoverySymbols={data.holdings.flatMap((holding) =>
-                holding.kind === 'stock' && holding.ticker ? [{ name: holding.name, ticker: holding.ticker }] : [],
-              )}
-            />
-          </div>
-        ) : null}
-        {mountedWorkspaces.topIndia ? (
-          <div hidden={workspace !== 'top-india'}>
-            <TopIndiaReturns />
-          </div>
-        ) : null}
-        {mountedWorkspaces.investments ? (
-          <div hidden={workspace !== 'investments'}>
-            <StockInvestmentChart data={data} />
-          </div>
-        ) : null}
-        {mountedWorkspaces.funds ? (
-          <div hidden={workspace !== 'funds'}>
-            <MutualFundInvestmentChart data={data} />
-          </div>
-        ) : null}
+      <Suspense fallback={<MarketTabSkeleton showTable={workspace !== 'top-india'} />}>
+        {mountedWorkspaces.custom ? <div hidden={workspace !== 'custom'}>{customWorkspace}</div> : null}
+        {mountedWorkspaces.topIndia ? <div hidden={workspace !== 'top-india'}>{topIndiaWorkspace}</div> : null}
+        {mountedWorkspaces.investments ? <div hidden={workspace !== 'investments'}>{investmentsWorkspace}</div> : null}
+        {mountedWorkspaces.funds ? <div hidden={workspace !== 'funds'}>{fundsWorkspace}</div> : null}
       </Suspense>
     </div>
   )
