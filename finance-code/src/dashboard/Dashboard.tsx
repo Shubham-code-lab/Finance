@@ -360,7 +360,7 @@ function defaultDashboardViews(range: { from: string; to: string }, stockIds: st
   return {
     moneyFlow: { range, series: moneyFlowKeys },
     saving: { range, series: savingKeys },
-    investment: { range, stockIds, view: 'line', metric: 'value' },
+    investment: { range, stockIds, view: 'line', metric: 'percent' },
     income: { range },
     lifestyle: { range, series: lifestyleKeys },
   }
@@ -383,14 +383,15 @@ export function Dashboard({
   const [defaultRange] = useState(lastThreeMonthsRange)
   const wealth = data.dashboard.wealth ?? defaultWealthView
   const eligibleStocks = useMemo(() => performanceHoldings(data.holdings), [data.holdings])
-  const [savedViews, setSavedViews] = useState<DashboardViewSettings>(
-    () =>
+  const [savedViews, setSavedViews] = useState<DashboardViewSettings>(() => {
+    const initial =
       data.dashboard.views ??
       defaultDashboardViews(
         defaultRange,
         eligibleStocks.map((holding) => holding.id),
-      ),
-  )
+      )
+    return { ...initial, investment: { ...initial.investment, metric: 'percent' } }
+  })
   const [mainRange, setMainRange] = useState(savedViews.moneyFlow.range)
   const [savingRange, setSavingRange] = useState(savedViews.saving.range)
   const [investmentRange, setInvestmentRange] = useState(savedViews.investment.range)
@@ -963,8 +964,8 @@ export function Dashboard({
                   }}
                   aria-label="Investment scale"
                 >
-                  <ToggleButton value="value">Value</ToggleButton>
                   <ToggleButton value="percent">Change %</ToggleButton>
+                  <ToggleButton value="value">Value</ToggleButton>
                 </ToggleButtonGroup>
               </div>
             ) : null}

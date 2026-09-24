@@ -5,8 +5,7 @@ import { createUseStyles } from 'react-jss'
 import { AppNavigation } from '@/app/AppNavigation'
 import { navItems, validViews, View, viewFromHash } from '@/app/navigation'
 import { FilterStatus } from '@/components/FilterStatus'
-import { DashboardSkeleton } from '@/components/DashboardSkeleton'
-import { DataPageSkeleton } from '@/components/DataPageSkeleton'
+import { PageSkeleton } from '@/components/PageSkeleton'
 import { Button } from '@/components/ui'
 import { StoreData, CustomTable, CustomTableRow, ChartSpec, BackupFile } from '@/domain/types'
 import { CloudControls } from '@/firebase/CloudControls'
@@ -210,14 +209,12 @@ export function App() {
       <div className={classes.body}>
         <AppNavigation view={view} onNavigate={navigate} />
         <main className={classes.main}>
-          <div className={classes.heading}>
-            <div className={classes.titleRow}>
-              {view !== 'stocks' ? (
+          {view !== 'stocks' ? (
+            <div className={classes.heading}>
+              <div className={classes.titleRow}>
                 <FilterStatus fetching={storeQuery.isFetching} ready={Boolean(storeQuery.data) && !storeQuery.isFetching} />
-              ) : null}
-              <h1 className={classes.title}>{title}</h1>
-            </div>
-            {view !== 'stocks' ? (
+                <h1 className={classes.title}>{title}</h1>
+              </div>
               <Button
                 className={classes.iconButton}
                 title="Refresh from Firebase"
@@ -227,11 +224,11 @@ export function App() {
               >
                 <RefreshIcon fontSize="small" />
               </Button>
-            ) : null}
-          </div>
-          {loading && view !== 'stocks' ? view === 'dashboard' ? <DashboardSkeleton /> : <DataPageSkeleton /> : null}
+            </div>
+          ) : null}
+          {loading ? <PageSkeleton view={view} /> : null}
           {loadError && view !== 'stocks' ? <div className={classes.loadState}>{loadError}</div> : null}
-          <Suspense fallback={view === 'dashboard' ? <DashboardSkeleton /> : <DataPageSkeleton />}>
+          <Suspense fallback={<PageSkeleton view={view} />}>
             {!loading && !loadError && view === 'dashboard' && (
               <Dashboard
                 data={data}
@@ -247,7 +244,7 @@ export function App() {
             )}
             {!loading && !loadError && view === 'income' && <IncomeView data={data} onSaved={load} />}
             {!loading && !loadError && view === 'investments' && <InvestmentsView data={data} onSaved={load} />}
-            {view === 'stocks' ? (
+            {view === 'stocks' && !loading ? (
               <MarketExplorer
                 data={data}
                 portfolioStatus={

@@ -42,8 +42,6 @@ export function FirebaseGate({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('hashchange', syncRoute)
   }, [])
 
-  if (marketOnly && !user) return children
-
   const signIn = async () => {
     if (!auth) return
     setError('')
@@ -56,6 +54,16 @@ export function FirebaseGate({ children }: { children: ReactNode }) {
     }
   }
 
+  if (loading) {
+    return (
+      <div className={classes.page}>
+        <div className={classes.status}>Checking secure session...</div>
+      </div>
+    )
+  }
+
+  if (marketOnly && !user) return children
+
   if (!firebaseConfigured || !auth) {
     return (
       <div className={classes.page}>
@@ -63,14 +71,6 @@ export function FirebaseGate({ children }: { children: ReactNode }) {
           <h1 className={classes.title}>Finance</h1>
           <div className={classes.status}>Firebase configuration is missing.</div>
         </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className={classes.page}>
-        <div className={classes.status}>Checking secure session...</div>
       </div>
     )
   }
