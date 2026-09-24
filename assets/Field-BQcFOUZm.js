@@ -1,1 +1,0 @@
-import{aA as a,j as r}from"./index-CVDeAqsx.js";function n({children:s}){const e=a();return s?r.jsx("span",{className:e.error,children:s}):null}function o({label:s,children:e}){const l=a();return r.jsxs("label",{className:l.label,children:[s,e]})}export{n as E,o as F};
