@@ -83,9 +83,7 @@ export async function getAllData(): Promise<StoreData> {
     incomeSources,
     plannedExpenses,
     forecastSettings: forecastSettingsRows.find((settings) => settings.id === 'default') ?? null,
-    dashboard: dashboard
-      ? { widgets: dashboard.widgets ?? [], wealth: dashboard.wealth ?? defaultWealthView, views: dashboard.views }
-      : { widgets: [], wealth: defaultWealthView },
+    dashboard: dashboard ? { widgets: dashboard.widgets ?? [], wealth: defaultWealthView } : { widgets: [], wealth: defaultWealthView },
   }
 }
 

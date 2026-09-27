@@ -5,7 +5,13 @@ import { usePrivacy } from '@/privacy/privacy'
 import { tokens } from '@/theme/tokens'
 
 const useStyles = createUseStyles({
-  button: { minWidth: '36px !important', padding: '4px !important', color: tokens.color.textMuted },
+  button: {
+    minWidth: `${tokens.control.iconButtonSize}px !important`,
+    width: tokens.control.iconButtonSize,
+    height: tokens.control.iconButtonSize,
+    padding: `${tokens.control.paddingY}px !important`,
+    color: tokens.color.textMuted,
+  },
 })
 
 export function PrivacyToggle() {

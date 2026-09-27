@@ -41,6 +41,27 @@ export const tokens = {
     sm: 4,
     md: 6,
   },
+  control: {
+    height: 28,
+    paddingX: 8,
+    paddingY: 3,
+    gap: 4,
+    iconButtonSize: 28,
+    iconSize: 18,
+    selectIconSpace: 28,
+    suffixSpace: 24,
+  },
+  navigation: {
+    collapsedWidth: 56,
+    expandedWidth: 216,
+    mobileWidth: 256,
+    rowHeight: 40,
+    iconSize: 28,
+  },
+  form: {
+    labelWidth: 150,
+    labelGap: 12,
+  },
   font: {
     family: 'ui-sans-serif, system-ui, "Segoe UI", sans-serif',
     sizeXs: 11,

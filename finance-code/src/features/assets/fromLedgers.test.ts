@@ -50,7 +50,7 @@ UPI/S J ARUN K/9739009054@ybl/January rent/S J ARUN KUMAR
 
     expect(rows.map((row) => [row.flow, row.categoryId, row.amount])).toEqual([
       ['outflow', 'lifestyle-food', 219.25],
-      ['inflow', 'salary', 102022],
+      ['inflow', 'unknown', 102022],
       ['outflow', 'rent-home', 28000],
     ])
     const transactions = statementRowsToTransactions(rows, 'statement')

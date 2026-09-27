@@ -1,7 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import { FormEvent, useMemo, useState } from 'react'
 import SearchIcon from '@mui/icons-material/Search'
-import { Tooltip as MuiTooltip } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { createUseStyles } from 'react-jss'
@@ -9,7 +7,7 @@ import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContai
 import { DateRangePicker } from '@/components/DateRangePicker'
 import { DateRangeValue, isValidDateRange } from '@/components/dateRange'
 import { ChartSkeleton } from '@/components/ChartSkeleton'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Card, Field, Input } from '@/components/ui'
 import { formatDateLabel, formatMoney, todayIso } from '@/domain/money'
 import { equalWeightPerformance, findMarketMoments, marketMovements } from '@/features/holdings/marketMoments'
 import { rankIndiaReturns } from '@/features/holdings/topIndiaReturns.utils'
@@ -41,22 +39,12 @@ const colors = [
   '#78c6ff',
   '#d2cd70',
 ]
-const storageKey = 'finance:top-india-returns-filters:v1'
-
 function defaultRange(): DateRangeValue {
   return { from: dayjs().subtract(1, 'year').format('YYYY-MM-DD'), to: todayIso() }
 }
 
 function readFilters() {
-  const fallback = { range: defaultRange(), count: 10 }
-  try {
-    const value = JSON.parse(window.localStorage.getItem(storageKey) ?? '') as { range?: DateRangeValue }
-    const storedRange = value.range ? { ...value.range, to: value.range.to > todayIso() ? todayIso() : value.range.to } : null
-    const range = storedRange?.from && storedRange.to && isValidDateRange(storedRange) ? storedRange : fallback.range
-    return { range, count: 10 }
-  } catch {
-    return fallback
-  }
+  return { range: defaultRange(), count: 10 }
 }
 
 const useStyles = createUseStyles({
@@ -79,38 +67,31 @@ const useStyles = createUseStyles({
   source: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs },
   filters: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(250px, 1fr) minmax(130px, 170px) minmax(130px, 170px) auto',
+    gridTemplateColumns: 'auto 220px 220px auto',
     gap: tokens.space.sm,
     alignItems: 'end',
     justifyContent: 'end',
+    width: '100%',
     '@media (max-width: 900px)': { gridTemplateColumns: 'minmax(250px, 1fr) minmax(130px, 1fr)' },
     '@media (max-width: 560px)': { gridTemplateColumns: '1fr' },
   },
   countControl: { display: 'contents' },
   dateFilter: {
-    minHeight: 40,
+    minHeight: tokens.control.height,
     display: 'flex',
     alignItems: 'stretch',
-    '& button': { minHeight: '40px !important' },
-    '@media (max-width: 900px)': { gridColumn: '1 / -1' },
+    justifySelf: 'end',
+    '& button': { minHeight: `${tokens.control.height}px !important` },
+    '@media (max-width: 900px)': { gridColumn: '1 / -1', width: '100%', justifySelf: 'stretch' },
   },
-  countField: { display: 'grid', gap: tokens.space.xs, minWidth: 0, color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
-  fieldLabel: {
-    minHeight: 18,
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.space.xs,
-    color: tokens.color.textMuted,
-    fontSize: tokens.font.sizeSm,
-  },
-  infoIcon: { width: '15px !important', height: '15px !important', color: tokens.color.textMuted, cursor: 'help' },
+  countField: { width: 220, maxWidth: '100%' },
   searchButton: {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: tokens.space.xs,
     minWidth: '104px !important',
-    minHeight: '40px !important',
+    minHeight: `${tokens.control.height}px !important`,
     '@media (max-width: 560px)': { width: '100%' },
   },
   chart: { height: 360, minHeight: 300, marginTop: tokens.space.md, '@media (max-width: 720px)': { height: 320 } },
@@ -161,14 +142,6 @@ export function TopIndiaReturns() {
     retry: 1,
   })
   const universe = universeQuery.data ?? []
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ range }))
-    } catch {
-      /* Keep the market view usable without storage. */
-    }
-  }, [range])
 
   const runSearch = (event: FormEvent) => {
     event.preventDefault()
@@ -245,13 +218,11 @@ export function TopIndiaReturns() {
               <DateRangePicker value={range} onChange={setRange} />
             </div>
             <div className={classes.countControl}>
-              <label className={classes.countField}>
-                <span className={classes.fieldLabel}>
-                  Nifty stocks
-                  <MuiTooltip title="Choose how many stocks from the live Nifty 500 list to scan." arrow>
-                    <InfoOutlinedIcon className={classes.infoIcon} tabIndex={0} aria-label="About Nifty stocks" />
-                  </MuiTooltip>
-                </span>
+              <Field
+                className={classes.countField}
+                label="Nifty stocks"
+                hint="Choose how many stocks from the live Nifty 500 list to scan."
+              >
                 <Input
                   type="number"
                   min={1}
@@ -261,14 +232,8 @@ export function TopIndiaReturns() {
                   onChange={(event) => setUniverseInput(event.target.value)}
                   aria-label="Number of stocks to scan"
                 />
-              </label>
-              <label className={classes.countField}>
-                <span className={classes.fieldLabel}>
-                  Top returns
-                  <MuiTooltip title="Choose how many of the highest-return stocks to show." arrow>
-                    <InfoOutlinedIcon className={classes.infoIcon} tabIndex={0} aria-label="About top returns" />
-                  </MuiTooltip>
-                </span>
+              </Field>
+              <Field className={classes.countField} label="Top returns" hint="Choose how many of the highest-return stocks to show.">
                 <Input
                   type="number"
                   min={1}
@@ -278,7 +243,7 @@ export function TopIndiaReturns() {
                   onChange={(event) => setCountInput(event.target.value)}
                   aria-label="Number of top returning stocks"
                 />
-              </label>
+              </Field>
               <Button type="submit" variant="primary" className={classes.searchButton} disabled={searching}>
                 <SearchIcon fontSize="small" />
                 {searching ? 'Searching' : 'Search'}

@@ -28,8 +28,19 @@ const muiTheme = createTheme({
       },
     },
     MuiButton: {
+      defaultProps: { size: 'small' },
       styleOverrides: {
-        root: { textTransform: 'none', borderRadius: tokens.radius.sm, fontWeight: tokens.font.weightMedium },
+        root: {
+          height: tokens.control.height,
+          minHeight: tokens.control.height,
+          padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px`,
+          lineHeight: 1.4,
+          textTransform: 'none',
+          borderRadius: tokens.radius.sm,
+          fontWeight: tokens.font.weightMedium,
+          '& .MuiButton-startIcon': { marginLeft: 0, marginRight: tokens.control.gap },
+          '& .MuiButton-endIcon': { marginLeft: tokens.control.gap, marginRight: 0 },
+        },
         outlined: { borderColor: tokens.color.borderStrong, backgroundColor: tokens.color.bgMuted },
         contained: { boxShadow: 'none' },
       },
@@ -56,37 +67,94 @@ const muiTheme = createTheme({
     },
     MuiCheckbox: {
       styleOverrides: {
-        root: { color: tokens.color.textMuted, '&.Mui-checked': { color: tokens.color.accent } },
+        root: { padding: tokens.control.gap, color: tokens.color.textMuted, '&.Mui-checked': { color: tokens.color.accent } },
       },
     },
     MuiFormControlLabel: {
       styleOverrides: { label: { fontSize: tokens.font.sizeMd, color: tokens.color.text } },
     },
     MuiTextField: {
-      defaultProps: { variant: 'outlined' },
+      defaultProps: { variant: 'outlined', size: 'small' },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        notchedOutline: { borderColor: tokens.color.border },
+        root: {
+          minHeight: tokens.control.height,
+          backgroundColor: tokens.color.bgPage,
+          '&:not(.MuiInputBase-multiline)': { height: tokens.control.height },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: tokens.color.borderStrong },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: tokens.color.focus },
+        },
+        input: { padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px` },
+        multiline: { padding: tokens.control.gap },
+      },
+    },
+    MuiSelect: {
+      styleOverrides: {
+        select: {
+          minHeight: 'unset',
+          padding: `${tokens.control.paddingY}px ${tokens.control.selectIconSpace}px ${tokens.control.paddingY}px ${tokens.control.paddingX}px !important`,
+        },
+      },
+    },
+    MuiNativeSelect: {
+      styleOverrides: {
+        select: {
+          minHeight: 'unset',
+          padding: `${tokens.control.paddingY}px ${tokens.control.selectIconSpace}px ${tokens.control.paddingY}px ${tokens.control.paddingX}px !important`,
+        },
+      },
+    },
+    MuiIconButton: {
+      defaultProps: { size: 'small' },
+      styleOverrides: {
+        sizeSmall: {
+          width: tokens.control.iconButtonSize,
+          height: tokens.control.iconButtonSize,
+          padding: tokens.control.paddingY,
+          '& svg': { fontSize: tokens.control.iconSize },
+        },
+      },
+    },
+    MuiToggleButton: {
+      defaultProps: { size: 'small' },
+      styleOverrides: {
+        root: {
+          height: tokens.control.height,
+          minHeight: tokens.control.height,
+          padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px`,
+          lineHeight: 1.4,
+          textTransform: 'none',
+        },
+      },
     },
     MuiMenuItem: {
       styleOverrides: {
         root: {
+          minHeight: `${tokens.control.height}px !important`,
+          padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px`,
           fontSize: tokens.font.sizeMd,
           '&.Mui-selected': { backgroundColor: tokens.color.accentSoft },
           '&.Mui-selected:hover': { backgroundColor: tokens.color.accentSoft },
         },
       },
     },
-    MuiOutlinedInput: {
+    MuiAutocomplete: {
       styleOverrides: {
-        notchedOutline: { borderColor: tokens.color.border },
-        root: {
-          backgroundColor: tokens.color.bgPage,
-          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: tokens.color.borderStrong },
-          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: tokens.color.focus },
+        inputRoot: {
+          height: tokens.control.height,
+          minHeight: tokens.control.height,
+          padding: `0 ${tokens.control.gap}px !important`,
         },
+        input: { padding: `2px ${tokens.control.gap}px !important` },
       },
     },
     MuiPaginationItem: {
       styleOverrides: {
         root: {
+          minWidth: tokens.control.height,
+          height: tokens.control.height,
           color: tokens.color.textMuted,
           borderColor: tokens.color.borderStrong,
           '&.Mui-selected': {

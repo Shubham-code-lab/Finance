@@ -34,10 +34,11 @@ function monthsBetween(fromMonth: string, toMonth: string) {
 }
 
 const useStyles = createUseStyles({
-  root: { width: 190, maxWidth: '100%', minWidth: 0 },
+  root: { width: 164, maxWidth: '100%', minWidth: 0 },
   trigger: {
     width: '100%',
-    minHeight: 40,
+    minHeight: tokens.control.height,
+    padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px !important`,
     justifyContent: 'flex-start',
     textTransform: 'none',
     whiteSpace: 'nowrap',
@@ -61,14 +62,14 @@ const useStyles = createUseStyles({
   },
   content: {
     display: 'grid',
-    gridTemplateColumns: '128px 288px',
-    '@media (max-width: 500px)': { gridTemplateColumns: '1fr', width: 'min(288px, calc(100vw - 24px))' },
+    gridTemplateColumns: '112px 260px',
+    '@media (max-width: 500px)': { gridTemplateColumns: '1fr', width: 'min(260px, calc(100vw - 24px))' },
   },
   shortcuts: {
     display: 'grid',
     alignContent: 'start',
     gap: tokens.space.xs,
-    padding: tokens.space.md,
+    padding: tokens.space.sm,
     maxHeight: 420,
     overflowY: 'auto',
     background: tokens.color.bgMuted,
@@ -82,10 +83,10 @@ const useStyles = createUseStyles({
   },
   shortcut: {
     width: '100%',
-    minHeight: 36,
+    minHeight: tokens.control.height,
     border: 0,
     borderRadius: tokens.radius.sm,
-    padding: [tokens.space.sm, tokens.space.md],
+    padding: [tokens.control.paddingY, tokens.control.paddingX],
     background: 'transparent',
     color: tokens.color.textMuted,
     textAlign: 'left',
@@ -99,7 +100,7 @@ const useStyles = createUseStyles({
     color: `${tokens.color.accent} !important`,
     fontWeight: tokens.font.weightMedium,
   },
-  calendar: { padding: tokens.space.md },
+  calendar: { padding: tokens.space.sm },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -111,7 +112,7 @@ const useStyles = createUseStyles({
   months: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.space.xs },
   month: {
     minWidth: 0,
-    minHeight: 40,
+    minHeight: 32,
     border: 0,
     borderRadius: tokens.radius.sm,
     background: 'transparent',

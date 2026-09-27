@@ -3,7 +3,7 @@ import { createUseStyles } from 'react-jss'
 import { Controller, useForm } from 'react-hook-form'
 import { PaginationBar } from '@/components/PaginationBar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { Button, Card, Drawer, ErrorText, Field, Input, MoneyText, Row, Select } from '@/components/ui'
+import { Button, Card, DatePicker, Drawer, ErrorText, Field, Input, MoneyText, Row, Select } from '@/components/ui'
 import { formatDisplayValue, toMinor } from '@/domain/money'
 import { CustomTable, CustomTableRow, StoreData, TableColumn } from '@/domain/types'
 import { tokens } from '@/theme/tokens'
@@ -294,14 +294,9 @@ export function TablesView({
                 title={drawer.mode === 'add' ? `Add row to ${selected.name}` : `Edit row in ${selected.name}`}
                 onClose={() => setDrawer(null)}
                 footer={
-                  <>
-                    <Button type="button" onClick={() => setDrawer(null)}>
-                      Cancel
-                    </Button>
-                    <Button variant="primary" type="submit" form="table-row-form">
-                      Save
-                    </Button>
-                  </>
+                  <Button variant="primary" type="submit" form="table-row-form">
+                    Save
+                  </Button>
                 }
               >
                 <form id="table-row-form" className={classes.drawerForm} onSubmit={handleSubmit(saveRow)}>
@@ -343,9 +338,11 @@ export function TablesView({
                                 </option>
                               ))}
                             </Select>
+                          ) : column.type === 'date' ? (
+                            <DatePicker value={String(field.value ?? '')} onChange={field.onChange} onBlur={field.onBlur} />
                           ) : (
                             <Input
-                              type={column.type === 'date' ? 'date' : column.type === 'number' ? 'number' : 'text'}
+                              type={column.type === 'number' ? 'number' : 'text'}
                               value={String(field.value ?? '')}
                               onChange={field.onChange}
                             />

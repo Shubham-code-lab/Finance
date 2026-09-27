@@ -10,6 +10,27 @@ export type ClassifiedStatement = {
   merchant: string
 }
 
+export const statementCategoryOptions = [
+  { id: 'unknown', name: 'Unknown', flow: null },
+  { id: 'salary', name: 'Salary', flow: 'inflow' },
+  { id: 'bank-interest', name: 'Bank interest / dividends', flow: 'inflow' },
+  { id: 'lifestyle-groceries', name: 'Groceries', flow: 'outflow' },
+  { id: 'lifestyle-food', name: 'Food delivery / restaurants', flow: 'outflow' },
+  { id: 'lifestyle-shopping', name: 'Shopping', flow: 'outflow' },
+  { id: 'lifestyle-travel', name: 'Travel / commute', flow: 'outflow' },
+  { id: 'lifestyle-utilities', name: 'Utilities / phone / internet', flow: 'outflow' },
+  { id: 'lifestyle-medical', name: 'Medical', flow: 'outflow' },
+  { id: 'lifestyle-entertainment', name: 'Entertainment', flow: 'outflow' },
+  { id: 'lifestyle-services', name: 'Services / government', flow: 'outflow' },
+  { id: 'rent-home', name: 'Rent', flow: 'outflow' },
+  { id: 'credit-card-payment', name: 'Credit-card payment', flow: 'transfer' },
+  { id: 'sip-mf', name: 'Mutual-fund investment', flow: 'transfer' },
+  { id: 'stock-market', name: 'Stock investment', flow: 'transfer' },
+  { id: 'personal-transfer', name: 'Personal transfer', flow: 'transfer' },
+  { id: 'other-income', name: 'Other income', flow: 'inflow' },
+  { id: 'other-expense', name: 'Other expense', flow: 'outflow' },
+] as const
+
 type Rule = {
   id: string
   merchant: string
@@ -18,7 +39,7 @@ type Rule = {
 }
 
 const rules: Rule[] = [
-  { id: 'salary', merchant: 'Amagi Media Labs', pattern: /amagi media|salary|neft-hdfch/i, flow: 'inflow' },
+  { id: 'salary', merchant: 'Salary', pattern: /\bsalary\b/i, flow: 'inflow' },
   { id: 'bank-interest', merchant: 'Bank interest / dividends', pattern: /interest credit|intdiv|dividend/i, flow: 'inflow' },
   {
     id: 'stock-market',
@@ -27,20 +48,17 @@ const rules: Rule[] = [
     flow: 'transfer',
   },
   { id: 'sip-mf', merchant: 'Mutual fund SIP', pattern: /mutualfund|mutual fund/i, flow: 'outflow' },
-  { id: 'rent-home', merchant: 'Home rent', pattern: /s j arun|arun kumar|9739009054|rent/i, flow: 'outflow' },
-  { id: 'roommate-reimbursement', merchant: 'Roommate reimbursement', pattern: /rangaswamy|splitwise/i, flow: 'transfer' },
-  { id: 'friend-reimbursement', merchant: 'Friend reimbursement', pattern: /aman praka|aman prakash|prakashaman/i, flow: 'transfer' },
+  { id: 'rent-home', merchant: 'Rent', pattern: /\brent\b/i, flow: 'outflow' },
   { id: 'credit-card-payment', merchant: 'SBI credit card', pattern: /credit card payment/i },
   {
     id: 'lifestyle-groceries',
     merchant: 'Groceries',
-    pattern: /blinkit|zepto|village ma|village market|amazon pay groceries|akshayakalpa|simplinamd|namdhari|milk|grocery|market/i,
+    pattern: /blinkit|zepto|amazon pay groceries|akshayakalpa|namdhari|\bgrocer(?:y|ies)\b/i,
   },
   {
     id: 'lifestyle-food',
     merchant: 'Food delivery / restaurants',
-    pattern:
-      /zomato|swiggy|aadams|uphara|sirvi|high table|biryani|restaurant|cafe|kitchen|canteen|juice|bakery|tea|coffee|pizza|burger|mithai/i,
+    pattern: /zomato|swiggy|restaurant|cafe|canteen|bakery|pizza|burger/i,
   },
   {
     id: 'lifestyle-shopping',
@@ -50,7 +68,7 @@ const rules: Rule[] = [
   {
     id: 'lifestyle-travel',
     merchant: 'Travel / commute',
-    pattern: /uber|ola|rapido|metro|bmtc|msrtc|irctc|confirm ti|confirm ticket|happyfares|abhibus|bus|rail|train/i,
+    pattern: /uber|\bola\b|rapido|\bmetro\b|bmtc|msrtc|irctc|confirm ticket|happyfares|abhibus/i,
   },
   {
     id: 'lifestyle-utilities',
@@ -66,7 +84,34 @@ const rules: Rule[] = [
   { id: 'lifestyle-services', merchant: 'Services / government', pattern: /passport|xerox|seva|courier|print/i },
 ]
 
+function titleCase(value: string) {
+  return value.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+/** Best-effort display label only. It never decides the category. */
+export function statementCounterparty(memo: string): string {
+  const parts = memo
+    .replace(/^\d{2}[/-]\d{2}[/-]\d{4}(?:\s+\d{2}[/-]\d{2}[/-]\d{4})?\s*/i, '')
+    .split(/[/|]/)
+    .map((part) =>
+      part
+        .replace(/[^a-z0-9 .&'-]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
+    .filter(
+      (part) =>
+        part.length >= 3 &&
+        !/^(upi|neft|imps|inft|ach|debit|credit|transfer|payment|ref|txn|dr|cr|by|to)$/i.test(part) &&
+        !/^\d+$/.test(part) &&
+        !part.includes('@'),
+    )
+  const candidate = parts.find((part) => /[a-z]{3}/i.test(part))
+  return candidate ? titleCase(candidate.slice(0, 60)) : 'Unknown recipient'
+}
+
 export function classifyStatementMemo(memo: string, detectedFlow: ClassifiedStatement['flow'], rupees = 0): ClassifiedStatement {
+  void rupees
   const rule = rules.find((item) => item.pattern.test(memo))
   if (rule) {
     return {
@@ -75,13 +120,10 @@ export function classifyStatementMemo(memo: string, detectedFlow: ClassifiedStat
       merchant: rule.merchant,
     }
   }
-  if (detectedFlow === 'outflow' && isRecurringTransferAmount(rupees)) {
-    return { categoryId: 'large-transfer', flow: 'transfer', merchant: 'Large transfer' }
-  }
   return {
-    categoryId: detectedFlow === 'inflow' ? 'other-credit' : 'uncategorized-spend',
+    categoryId: 'unknown',
     flow: detectedFlow,
-    merchant: detectedFlow === 'inflow' ? 'Other credit' : 'Other spend',
+    merchant: statementCounterparty(memo),
   }
 }
 
@@ -91,7 +133,8 @@ export function isLifestyleCategory(categoryId: string | null | undefined): bool
     (categoryId.startsWith('lifestyle-') ||
       categoryId === 'rent-home' ||
       categoryId === 'credit-card-payment' ||
-      categoryId === 'uncategorized-spend'),
+      categoryId === 'unknown' ||
+      categoryId === 'other-expense'),
   )
 }
 

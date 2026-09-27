@@ -27,7 +27,12 @@ const useStyles = createUseStyles({
     color: tokens.color.textMuted,
     fontSize: tokens.font.sizeSm,
   },
-  iconButton: { minWidth: '36px !important', padding: '4px !important' },
+  iconButton: {
+    minWidth: `${tokens.control.iconButtonSize}px !important`,
+    width: tokens.control.iconButtonSize,
+    height: tokens.control.iconButtonSize,
+    padding: `${tokens.control.paddingY}px !important`,
+  },
 })
 
 export function CloudControls() {

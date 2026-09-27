@@ -1,20 +1,22 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { createUseStyles } from 'react-jss'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PaginationBar } from '@/components/PaginationBar'
-import { Button, Card, Drawer, ErrorText, Field, Input, MoneyText, Row, Select } from '@/components/ui'
+import { Button, Card, DatePicker, Drawer, ErrorText, Field, Input, MoneyText, Row, Select } from '@/components/ui'
 import { formatDateLabel, formatMonthLabel, toMinor, todayIso } from '@/domain/money'
 import { currentMonth, dateOnDay, holdingDate, monthsInclusive, sipEventId } from '@/domain/sip'
 import { Holding, HoldingKind, PurchaseMode, SipStatus, StoreData } from '@/domain/types'
 import { refreshInvestmentSnapshots } from '@/features/holdings/refreshSnapshots'
+import { syncInvestmentPortfolio } from '@/features/holdings/syncInvestmentPortfolio'
+import { hasConfirmedMarketValue, marketValueStatus } from '@/features/holdings/marketValueStatus'
 import { deleteHolding, upsertHolding, upsertSipEvent } from '@/storage/repository'
 import { tokens } from '@/theme/tokens'
+import { usePageHeaderAction } from '@/app/PageHeaderAction'
 
 const useStyles = createUseStyles({
   page: { display: 'grid', gap: tokens.space.md },
-  hint: { color: tokens.color.textMuted, fontSize: tokens.font.sizeSm, lineHeight: 1.4 },
   form: { display: 'grid', gap: tokens.space.md },
   gridWrap: {
     overflow: 'auto',
@@ -33,8 +35,10 @@ const useStyles = createUseStyles({
   td: { padding: [tokens.space.sm, tokens.space.md], borderBottom: `1px solid ${tokens.color.border}` },
   row: { '&:nth-child(even)': { background: tokens.color.bgCard }, '&:hover': { background: tokens.color.accentSoft } },
   totalRow: { background: tokens.color.bgMuted, borderTop: `2px solid ${tokens.color.borderStrong}` },
-  head: { display: 'flex', justifyContent: 'space-between', gap: tokens.space.md, alignItems: 'center' },
   meta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
+  marketValue: { display: 'grid', gap: 2 },
+  marketMeta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs, whiteSpace: 'nowrap' },
+  marketFallback: { color: tokens.color.warning },
   months: { display: 'grid', gap: tokens.space.sm },
   month: {
     display: 'grid',
@@ -65,8 +69,8 @@ const useStyles = createUseStyles({
   },
   sipActions: {
     '& .MuiToggleButton-root': {
-      minHeight: 30,
-      padding: '4px 9px',
+      minHeight: tokens.control.height,
+      padding: [tokens.control.paddingY, tokens.control.paddingX],
       borderColor: tokens.color.borderStrong,
       color: tokens.color.textMuted,
       textTransform: 'none',
@@ -118,6 +122,7 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
   const [pendingRemove, setPendingRemove] = useState<Holding | null>(null)
   const [removing, setRemoving] = useState(false)
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -125,7 +130,6 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
     formState: { errors },
   } = useForm<HoldingForm>({ defaultValues: emptyForm() })
   const items = data.holdings.filter((item) => item.kind === kind)
-  const title = kind === 'mutual_fund' ? 'Mutual funds' : 'Stocks'
   const asOf = currentMonth()
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
   const activePage = Math.min(page, totalPages)
@@ -140,6 +144,12 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
   }
 
   const purchaseMode = watch('purchaseMode')
+  const startAdd = useCallback(() => {
+    reset(emptyForm())
+    setDrawer({})
+  }, [reset])
+
+  usePageHeaderAction(`Add ${kind === 'mutual_fund' ? 'fund' : 'stock'}`, startAdd)
 
   const saveHolding = async (values: HoldingForm) => {
     if (!drawer) return
@@ -165,7 +175,7 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
       origin: 'user',
     }
     await upsertHolding(holding)
-    await persistSnapshots()
+    await syncInvestmentPortfolio()
     setDrawer(null)
     await onSaved()
   }
@@ -204,22 +214,6 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
   return (
     <div className={classes.page}>
       <Card>
-        <div className={classes.head}>
-          <p className={classes.hint}>
-            {title} live on this screen. SIP answers are stored securely in Firebase and refresh dashboard snapshots.
-          </p>
-          <Button
-            variant="primary"
-            onClick={() => {
-              reset(emptyForm())
-              setDrawer({})
-            }}
-          >
-            Add {kind === 'mutual_fund' ? 'fund' : 'stock'}
-          </Button>
-        </div>
-      </Card>
-      <Card>
         <div className={classes.gridWrap}>
           <table className={classes.table}>
             <thead>
@@ -243,7 +237,12 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
                   <td className={classes.td}>{holding.purchaseMode === 'sip' ? 'SIP' : 'Lump sum'}</td>
                   <td className={classes.td}>{holdingDate(holding) ? formatDateLabel(holdingDate(holding)) : '—'}</td>
                   <td className={classes.td}>
-                    <MoneyText amountMinor={holding.currentMinor} tone="steady" />
+                    <div className={classes.marketValue}>
+                      <MoneyText amountMinor={holding.currentMinor} tone="steady" />
+                      <span className={`${classes.marketMeta} ${hasConfirmedMarketValue(holding) ? '' : classes.marketFallback}`}>
+                        {marketValueStatus(holding)}
+                      </span>
+                    </div>
                   </td>
                   <td className={classes.td}>
                     <MoneyText amountMinor={holding.investedMinor} tone="steady" />
@@ -350,14 +349,9 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
           title={drawer.id ? `Edit ${kind === 'mutual_fund' ? 'fund' : 'stock'}` : `Add ${kind === 'mutual_fund' ? 'fund' : 'stock'}`}
           onClose={() => setDrawer(null)}
           footer={
-            <>
-              <Button type="button" onClick={() => setDrawer(null)}>
-                Cancel
-              </Button>
-              <Button variant="primary" type="submit" form="holding-form">
-                Save
-              </Button>
-            </>
+            <Button variant="primary" type="submit" form="holding-form">
+              Save
+            </Button>
           }
         >
           <form id="holding-form" className={classes.form} onSubmit={handleSubmit(saveHolding)}>
@@ -409,7 +403,12 @@ export function HoldingsView({ data, kind, onSaved }: { data: StoreData; kind: H
               </>
             ) : null}
             <Field label="Invested on">
-              <Input type="date" {...register('buyDate', { validate: (value) => Boolean(value) || 'Invested date is required.' })} />
+              <Controller
+                control={control}
+                name="buyDate"
+                rules={{ validate: (value) => Boolean(value) || 'Invested date is required.' }}
+                render={({ field }) => <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />}
+              />
               <ErrorText>{errors.buyDate?.message}</ErrorText>
             </Field>
             {purchaseMode === 'sip' ? (

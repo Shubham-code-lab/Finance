@@ -16,8 +16,6 @@ const MutualFundInvestmentChart = lazy(() =>
   import('@/features/holdings/MutualFundInvestmentChart').then((module) => ({ default: module.MutualFundInvestmentChart })),
 )
 
-const workspaceKey = 'finance:stock-market-workspace:v1'
-
 const useStyles = createUseStyles({
   root: { display: 'grid', gap: tokens.space.md },
   modeBar: {
@@ -34,14 +32,7 @@ type Workspace = 'custom' | 'top-india' | 'investments' | 'funds'
 
 export function MarketExplorer({ portfolioStatus, data }: { portfolioStatus?: string; data: StoreData }) {
   const classes = useStyles()
-  const [workspace, setWorkspace] = useState<Workspace>(() => {
-    try {
-      const saved = window.localStorage.getItem(workspaceKey)
-      return saved === 'top-india' || saved === 'investments' || saved === 'funds' ? saved : 'custom'
-    } catch {
-      return 'custom'
-    }
-  })
+  const [workspace, setWorkspace] = useState<Workspace>('custom')
   const [mountedWorkspaces, setMountedWorkspaces] = useState(() => ({
     custom: workspace === 'custom',
     topIndia: workspace === 'top-india',
@@ -74,11 +65,6 @@ export function MarketExplorer({ portfolioStatus, data }: { portfolioStatus?: st
         funds: current.funds || next === 'funds',
       }))
     })
-    try {
-      window.localStorage.setItem(workspaceKey, next)
-    } catch {
-      /* Mode still switches without storage. */
-    }
   }
 
   return (

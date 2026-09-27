@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseMutualFundHistory, selectMutualFundScheme } from '@/market/mutualFundNav.api'
+import { closestNavHistory, parseMutualFundHistory, selectMutualFundScheme } from '@/market/mutualFundNav.api'
 
 describe('mutual fund NAV adapter', () => {
   it('selects the matching direct growth scheme', () => {
@@ -32,5 +32,13 @@ describe('mutual fund NAV adapter', () => {
       { date: '2026-02-01', nav: 11.5 },
       { date: '2026-02-03', nav: 12.25 },
     ])
+  })
+
+  it('uses imported NAV context to distinguish schemes with the same name', () => {
+    const histories = [
+      { scheme: { schemeCode: 127044, schemeName: 'Motilal Oswal Midcap Fund' }, points: [{ date: '2026-09-25', nav: 47.5978 }] },
+      { scheme: { schemeCode: 127042, schemeName: 'Motilal Oswal Midcap Fund' }, points: [{ date: '2026-09-25', nav: 116.6964 }] },
+    ]
+    expect(closestNavHistory(110.7, histories)?.scheme.schemeCode).toBe(127042)
   })
 })

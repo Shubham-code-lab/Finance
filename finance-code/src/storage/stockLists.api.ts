@@ -18,7 +18,14 @@ export async function readStockLists(): Promise<StockListState | null> {
   const target = reference()
   if (!target) return null
   const snapshot = await getDoc(target)
-  return snapshot.exists() ? normalizeStockListState(snapshot.data()) : null
+  if (!snapshot.exists()) return null
+  const raw = snapshot.data()
+  const normalized = normalizeStockListState(raw)
+  if ('currentStocks' in raw) {
+    const cleaned: StockListDocument = { version: 1, ...normalized, updatedAt: new Date().toISOString() }
+    await setDoc(target, cleaned)
+  }
+  return normalized
 }
 
 export function writeStockLists(value: StockListState) {

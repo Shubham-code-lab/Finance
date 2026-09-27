@@ -1,17 +1,16 @@
 import { useMemo, useState, useTransition } from 'react'
-import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
-import DeleteIcon from '@mui/icons-material/Delete'
 import RestoreIcon from '@mui/icons-material/Restore'
 import EditIcon from '@mui/icons-material/Edit'
-import { Chip, Tooltip as MuiTooltip } from '@mui/material'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
+import { Chip, IconButton, Menu, MenuItem, Tooltip as MuiTooltip } from '@mui/material'
 import { createUseStyles } from 'react-jss'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { buildWealthProjection, SpendLookback } from '@/calc/forecast'
 import { normalizeForecastAdjustments } from '@/calc/forecastAdjustments'
 import { FilterStatus } from '@/components/FilterStatus'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { Button, ErrorText, Field, Input, MoneyText, Select } from '@/components/ui'
+import { Button, DatePicker, ErrorText, Field, Input, MoneyText, MonthPicker, Select } from '@/components/ui'
 import { formatMonthLabel, toMinor, todayIso } from '@/domain/money'
 import { ForecastAdjustment, ForecastSettings, PlannedExpense, PlannedExpenseCategory, StoreData } from '@/domain/types'
 import { addMonths } from '@/domain/sip'
@@ -19,7 +18,7 @@ import { ForecastInfoTip } from '@/dashboard/ForecastInfoTip'
 import { ForecastHorizonPicker } from '@/dashboard/ForecastHorizonPicker'
 import { ForecastChartTooltip } from '@/dashboard/ForecastChartTooltip'
 import { ForecastPercentInput } from '@/dashboard/ForecastPercentInput'
-import { ForecastScheduleEditor } from '@/dashboard/ForecastScheduleEditor'
+import { ForecastScheduleEditor, type PlannerSection } from '@/dashboard/ForecastScheduleEditor'
 import { deletePlannedExpense, upsertForecastSettings, upsertPlannedExpense } from '@/storage/repository'
 import { tokens } from '@/theme/tokens'
 import { formatPrivateMoney, formatPrivateNumber, usePrivacy } from '@/privacy/privacy'
@@ -28,34 +27,34 @@ const useStyles = createUseStyles({
   root: { display: 'grid', gap: tokens.space.lg },
   toolbar: { display: 'flex', alignItems: 'end', justifyContent: 'space-between', gap: tokens.space.md, flexWrap: 'wrap' },
   toolbarGroup: { display: 'flex', alignItems: 'end', gap: tokens.space.sm, flexWrap: 'wrap' },
-  controlLabel: { display: 'grid', gap: tokens.space.xs, color: tokens.color.textMuted, fontSize: tokens.font.sizeXs },
   assumptions: {
     display: 'grid',
     gap: tokens.space.sm,
-    paddingBottom: tokens.space.md,
   },
   assumptionsHead: {
     display: 'flex',
-    alignItems: 'start',
-    justifyContent: 'space-between',
-    gap: tokens.space.md,
-    '& p': { margin: [tokens.space.xs, 0, 0], color: tokens.color.textMuted, fontSize: tokens.font.sizeXs },
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: tokens.space.xs,
   },
   assumptionsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: tokens.space.sm,
   },
-  assumptionField: { minWidth: 0 },
-  assumptionsFooter: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: tokens.space.sm },
+  assumptionPrimary: { display: 'contents' },
+  returnsGrid: { display: 'contents' },
+  assumptionField: { minWidth: 0, maxWidth: '100%' },
+  assumptionWide: { width: 340 },
+  assumptionRate: { width: 252 },
+  assumptionMonth: { width: 328 },
   selectWrap: { width: '100%' },
   rateInput: {
     boxSizing: 'border-box',
     width: '100%',
-    minHeight: 38,
+    minHeight: tokens.control.height,
     border: `1px solid ${tokens.color.borderStrong}`,
     borderRadius: tokens.radius.sm,
-    padding: [tokens.space.sm, 28, tokens.space.sm, tokens.space.md],
+    padding: [tokens.control.paddingY, tokens.control.suffixSpace, tokens.control.paddingY, tokens.control.paddingX],
     background: tokens.color.bgMuted,
     color: tokens.color.text,
     font: 'inherit',
@@ -73,21 +72,6 @@ const useStyles = createUseStyles({
     pointerEvents: 'none',
     fontSize: tokens.font.sizeSm,
   },
-  monthInput: {
-    boxSizing: 'border-box',
-    width: '100%',
-    minHeight: 38,
-    border: `1px solid ${tokens.color.borderStrong}`,
-    borderRadius: tokens.radius.sm,
-    padding: [tokens.space.sm, tokens.space.md],
-    background: tokens.color.bgMuted,
-    color: tokens.color.text,
-    colorScheme: 'dark',
-    font: 'inherit',
-    fontSize: tokens.font.sizeSm,
-    outline: 0,
-    '&:focus': { borderColor: tokens.color.accent },
-  },
   plans: { display: 'grid', gap: tokens.space.sm },
   plansHead: { display: 'flex', alignItems: 'center', gap: tokens.space.xs, color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
   chipRow: { display: 'flex', alignItems: 'center', gap: tokens.space.sm, flexWrap: 'wrap' },
@@ -102,6 +86,7 @@ const useStyles = createUseStyles({
   },
   emptyPlans: { color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
   restore: { display: 'flex', alignItems: 'end', gap: tokens.space.sm, flexWrap: 'wrap' },
+  restoreField: { width: 388, maxWidth: '100%' },
   restoreSelect: { width: 240, maxWidth: '100%' },
   summaryBand: {
     display: 'grid',
@@ -122,7 +107,7 @@ const useStyles = createUseStyles({
   summaryLabel: { display: 'flex', alignItems: 'center', gap: 2, color: tokens.color.textMuted, fontSize: tokens.font.sizeXs },
   summaryValue: { fontSize: 19, fontWeight: tokens.font.weightMedium, '& span': { fontSize: 19 } },
   breakdown: { display: 'flex', flexWrap: 'wrap', gap: tokens.space.lg, color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
-  infoButton: { color: `${tokens.color.textMuted} !important`, padding: '2px !important', '& svg': { fontSize: 15 } },
+  infoButton: { color: `${tokens.color.textMuted} !important` },
   frame: { height: 390, minWidth: 0, '@media (max-width: 720px)': { height: 330 } },
   detailsButton: { justifySelf: 'start' },
   wrap: { overflowX: 'auto', maxHeight: 440, overflowY: 'auto' },
@@ -136,11 +121,34 @@ const useStyles = createUseStyles({
   headerCell: { position: 'sticky', top: 0, zIndex: 1, background: tokens.color.bgMuted, color: tokens.color.textMuted },
   left: { textAlign: 'left' },
   drawerSection: { display: 'grid', gap: tokens.space.sm, paddingBottom: tokens.space.md },
-  drawerSectionBorder: { paddingTop: tokens.space.md, borderTop: `1px solid ${tokens.color.border}` },
+  drawerSectionBorder: {},
   drawerSectionHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: tokens.space.sm },
+  drawerSectionTitleRow: { display: 'flex', alignItems: 'center', gap: tokens.space.xs },
   drawerSectionTitle: { margin: 0, fontSize: tokens.font.sizeMd },
-  form: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: tokens.space.sm },
-  formActions: { gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: tokens.space.xs },
+  form: {
+    display: 'grid',
+    gap: tokens.space.sm,
+  },
+  planNameField: { width: 448, maxWidth: '100%' },
+  planAmountField: { width: 278, maxWidth: '100%' },
+  planDateField: { width: 328, maxWidth: '100%' },
+  planTypeField: { width: 298, maxWidth: '100%' },
+  formMessage: { display: 'block' },
+  planList: { display: 'grid', gap: tokens.space.xs, marginTop: tokens.space.sm },
+  planListTitle: { margin: [tokens.space.sm, 0, 0], fontSize: tokens.font.sizeSm },
+  planRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    alignItems: 'center',
+    gap: tokens.space.sm,
+    padding: tokens.space.sm,
+    border: `1px solid ${tokens.color.border}`,
+    borderRadius: tokens.radius.sm,
+  },
+  planRowMain: { display: 'grid', minWidth: 0, gap: 2 },
+  planRowMeta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs },
+  planMoreButton: { width: `${tokens.control.iconButtonSize}px !important`, height: `${tokens.control.iconButtonSize}px !important` },
+  deleteMenuItem: { color: `${tokens.color.danger} !important` },
   saveStatus: { color: tokens.color.positive, fontSize: tokens.font.sizeXs, alignSelf: 'center' },
 })
 
@@ -182,6 +190,7 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
   )
   const [adjustments, setAdjustments] = useState<ForecastAdjustment[]>(() => normalizeForecastAdjustments(savedSettings?.adjustments))
   const [plannerDrawerOpen, setPlannerDrawerOpen] = useState(false)
+  const [plannerSection, setPlannerSection] = useState<PlannerSection>('assumptions')
   const [showDetails, setShowDetails] = useState(false)
   const [drawerId, setDrawerId] = useState<string | null | undefined>(undefined)
   const [draft, setDraft] = useState<PlanDraft>(blankPlan)
@@ -190,6 +199,8 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
   const [hiddenPlanIds, setHiddenPlanIds] = useState<string[]>([])
   const [actionError, setActionError] = useState('')
   const [pendingPlanAction, setPendingPlanAction] = useState<{ plan: PlannedExpense; kind: 'exclude' | 'delete' } | null>(null)
+  const [planMenuAnchor, setPlanMenuAnchor] = useState<HTMLElement | null>(null)
+  const [menuPlan, setMenuPlan] = useState<PlannedExpense | null>(null)
   const [settingsSaved, setSettingsSaved] = useState(Boolean(savedSettings))
   const [isPending, startTransition] = useTransition()
   const today = todayIso()
@@ -248,17 +259,11 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
     })),
   ]
 
-  const openNewPlan = () => {
-    setDraft(blankPlan())
-    setFormError('')
-    setDrawerId(null)
-    setPlannerDrawerOpen(true)
-  }
-
   const openPlan = (plan: PlannedExpense) => {
     setDraft({ name: plan.name, amount: String(plan.amountMinor / 100), date: plan.date, category: plan.category })
     setFormError('')
     setDrawerId(plan.id)
+    setPlannerSection('plans')
     setPlannerDrawerOpen(true)
   }
 
@@ -359,17 +364,14 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
       <div className={classes.toolbar}>
         <div className={classes.toolbarGroup}>
           <FilterStatus fetching={isPending} ready={!isPending} />
-          <label className={classes.controlLabel}>
-            Time horizon
-            <ForecastHorizonPicker
-              baseMonth={today.slice(0, 7)}
-              months={months}
-              onChange={(next) => {
-                startTransition(() => setMonths(next))
-                void saveSettings({ months: next })
-              }}
-            />
-          </label>
+          <ForecastHorizonPicker
+            baseMonth={today.slice(0, 7)}
+            months={months}
+            onChange={(next) => {
+              startTransition(() => setMonths(next))
+              void saveSettings({ months: next })
+            }}
+          />
         </div>
         <div className={classes.toolbarGroup}>
           <Button variant="primary" onClick={() => setPlannerDrawerOpen(true)} aria-expanded={plannerDrawerOpen}>
@@ -382,27 +384,50 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
         adjustments={adjustments}
         onChange={saveAdjustments}
         drawerOpen={plannerDrawerOpen}
+        activeSection={plannerSection}
+        onActiveSectionChange={setPlannerSection}
+        drawerAssumptionsAction={
+          <Button variant="primary" disabled={settingsSaved} onClick={() => saveSettings()}>
+            Save
+          </Button>
+        }
+        drawerPlansAction={
+          <Button type="submit" form="planner-plan-form" variant="primary">
+            {drawerId ? 'Update plan' : 'Add plan'}
+          </Button>
+        }
         onDrawerOpenChange={(open) => {
           setPlannerDrawerOpen(open)
           if (!open) {
+            if (!settingsSaved) {
+              setSpendLookback(savedSettings?.spendLookback ?? 6)
+              setMutualFundReturn(savedSettings?.mutualFundAnnualReturnPct ?? 10)
+              setStockReturn(savedSettings?.stockAnnualReturnPct ?? 8)
+              setSalaryGrowth(savedSettings?.salaryAnnualGrowthPct ?? 0)
+              setFirstSalaryGrowthMonth(savedSettings?.salaryGrowthStartMonth ?? addMonths(todayIso().slice(0, 7), 12))
+              setSettingsSaved(Boolean(savedSettings))
+            }
             setDrawerId(undefined)
             setDraft(blankPlan())
             setFormError('')
+            setPlanMenuAnchor(null)
+            setMenuPlan(null)
           }
         }}
         drawerContentBefore={
-          <>
-            <section className={classes.assumptions}>
-              <div className={classes.assumptionsHead}>
-                <strong>Assumptions</strong>
-                <ForecastInfoTip
-                  className={classes.infoButton}
-                  label="Living costs repeat from your selected history. Returns compound monthly and salary raises repeat yearly."
-                />
+          <section className={classes.assumptions}>
+            <div className={classes.assumptionsHead}>
+              <div>
+                <strong>Projection inputs</strong>
               </div>
-              <div className={classes.assumptionsGrid}>
-                <label className={`${classes.controlLabel} ${classes.assumptionField}`}>
-                  Spending history
+              <ForecastInfoTip
+                className={classes.infoButton}
+                label="Living costs repeat from your selected history. Returns compound monthly and salary raises repeat yearly."
+              />
+            </div>
+            <div className={classes.assumptionsGrid}>
+              <div className={classes.assumptionPrimary}>
+                <Field label="Spending history" className={`${classes.assumptionField} ${classes.assumptionWide}`}>
                   <span className={classes.selectWrap}>
                     <Select
                       value={String(spendLookback)}
@@ -419,9 +444,19 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
                       <option value="all">All data</option>
                     </Select>
                   </span>
-                </label>
-                <label className={`${classes.controlLabel} ${classes.assumptionField}`}>
-                  Mutual fund return
+                </Field>
+                <Field label="First salary increase" className={`${classes.assumptionField} ${classes.assumptionMonth}`}>
+                  <MonthPicker
+                    value={firstSalaryGrowthMonth}
+                    onChange={(value) => {
+                      setFirstSalaryGrowthMonth(value)
+                      setSettingsSaved(false)
+                    }}
+                  />
+                </Field>
+              </div>
+              <div className={classes.returnsGrid}>
+                <Field label="Mutual fund return" className={`${classes.assumptionField} ${classes.assumptionRate}`}>
                   <ForecastPercentInput
                     classNames={{ wrap: classes.rateWrap, input: classes.rateInput, suffix: classes.rateSuffix }}
                     value={mutualFundReturn}
@@ -430,9 +465,8 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
                       setSettingsSaved(false)
                     }}
                   />
-                </label>
-                <label className={`${classes.controlLabel} ${classes.assumptionField}`}>
-                  Stock return
+                </Field>
+                <Field label="Stock return" className={`${classes.assumptionField} ${classes.assumptionRate}`}>
                   <ForecastPercentInput
                     classNames={{ wrap: classes.rateWrap, input: classes.rateInput, suffix: classes.rateSuffix }}
                     value={stockReturn}
@@ -441,9 +475,8 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
                       setSettingsSaved(false)
                     }}
                   />
-                </label>
-                <label className={`${classes.controlLabel} ${classes.assumptionField}`}>
-                  Salary increase / year
+                </Field>
+                <Field label="Salary increase / year" className={`${classes.assumptionField} ${classes.assumptionRate}`}>
                   <ForecastPercentInput
                     classNames={{ wrap: classes.rateWrap, input: classes.rateInput, suffix: classes.rateSuffix }}
                     value={salaryGrowth}
@@ -452,92 +485,110 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
                       setSettingsSaved(false)
                     }}
                   />
-                </label>
-                <label className={`${classes.controlLabel} ${classes.assumptionField}`}>
-                  First salary increase
-                  <input
-                    className={classes.monthInput}
-                    type="month"
-                    value={firstSalaryGrowthMonth}
-                    onChange={(event) => {
-                      setFirstSalaryGrowthMonth(event.target.value)
-                      setSettingsSaved(false)
-                    }}
-                  />
-                </label>
+                </Field>
               </div>
-              <div className={classes.assumptionsFooter}>
-                <span className={classes.saveStatus}>{settingsSaved ? 'Saved' : 'Unsaved'}</span>
-                <Button variant="primary" disabled={settingsSaved} onClick={() => saveSettings()}>
-                  Save assumptions
-                </Button>
+            </div>
+            <span className={classes.saveStatus}>{settingsSaved ? 'Saved' : 'Unsaved changes'}</span>
+          </section>
+        }
+        drawerPlans={
+          <section className={`${classes.drawerSection} ${classes.drawerSectionBorder}`}>
+            <div className={classes.drawerSectionHead}>
+              <div className={classes.drawerSectionTitleRow}>
+                <h3 className={classes.drawerSectionTitle}>{drawerId ? 'Edit planned purchase' : 'Add a planned purchase'}</h3>
+                <ForecastInfoTip
+                  className={classes.infoButton}
+                  label="This one-time future expense is deducted from the projection on its purchase date."
+                />
               </div>
-            </section>
-            <section className={`${classes.drawerSection} ${classes.drawerSectionBorder}`}>
-              <div className={classes.drawerSectionHead}>
-                <h3 className={classes.drawerSectionTitle}>{drawerId ? 'Edit plan' : 'Planned purchase'}</h3>
-                {drawerId ? (
-                  <Button type="button" onClick={openNewPlan}>
-                    <AddIcon fontSize="small" /> New
-                  </Button>
-                ) : null}
-              </div>
-              <div className={classes.form}>
-                <Field label="Plan">
-                  <Input
-                    value={draft.name}
-                    placeholder="Phone, trip, bike..."
-                    onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Amount (INR)">
-                  <Input
-                    type="number"
-                    min="1"
-                    value={draft.amount}
-                    onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Purchase date">
-                  <Input
-                    type="date"
-                    min={today}
-                    value={draft.date}
-                    onChange={(event) => setDraft((current) => ({ ...current, date: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Type">
-                  <Select
-                    value={draft.category}
-                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value as PlannedExpenseCategory }))}
-                  >
-                    {Object.entries(categoryLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+            </div>
+            <form
+              id="planner-plan-form"
+              className={classes.form}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void savePlan()
+              }}
+            >
+              <Field label="Plan" className={classes.planNameField}>
+                <Input
+                  value={draft.name}
+                  placeholder="Phone, trip, bike..."
+                  onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                />
+              </Field>
+              <Field label="Amount (INR)" className={classes.planAmountField}>
+                <Input
+                  type="number"
+                  min="1"
+                  value={draft.amount}
+                  onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))}
+                />
+              </Field>
+              <Field label="Purchase date" className={classes.planDateField}>
+                <DatePicker value={draft.date} min={today} onChange={(date) => setDraft((current) => ({ ...current, date }))} />
+              </Field>
+              <Field label="Type" className={classes.planTypeField}>
+                <Select
+                  value={draft.category}
+                  onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value as PlannedExpenseCategory }))}
+                >
+                  {Object.entries(categoryLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <span className={classes.formMessage}>
                 <ErrorText>{formError}</ErrorText>
-                <span className={classes.formActions}>
-                  {drawerId ? (
-                    <Button
-                      variant="danger"
-                      onClick={() => {
-                        const plan = (data.plannedExpenses ?? []).find((item) => item.id === drawerId)
-                        if (plan) setPendingPlanAction({ plan, kind: 'delete' })
+              </span>
+            </form>
+            {activePlans.length ? (
+              <div className={classes.planList}>
+                <h4 className={classes.planListTitle}>Added plans</h4>
+                {activePlans.map((plan) => (
+                  <div className={classes.planRow} key={plan.id}>
+                    <span className={classes.planRowMain}>
+                      <strong>{plan.name}</strong>
+                      <span className={classes.planRowMeta}>
+                        {privateMoney(plan.amountMinor)} · {planDate(plan.date)}
+                      </span>
+                    </span>
+                    <IconButton
+                      className={classes.planMoreButton}
+                      aria-label={`Actions for ${plan.name}`}
+                      onClick={(event) => {
+                        setMenuPlan(plan)
+                        setPlanMenuAnchor(event.currentTarget)
                       }}
                     >
-                      <DeleteIcon fontSize="small" /> Delete
-                    </Button>
-                  ) : null}
-                  <Button variant="primary" onClick={savePlan}>
-                    {drawerId ? 'Update plan' : 'Add plan'}
-                  </Button>
-                </span>
+                      <MoreVertIcon />
+                    </IconButton>
+                  </div>
+                ))}
+                <Menu anchorEl={planMenuAnchor} open={Boolean(planMenuAnchor)} onClose={() => setPlanMenuAnchor(null)}>
+                  <MenuItem
+                    onClick={() => {
+                      if (menuPlan) openPlan(menuPlan)
+                      setPlanMenuAnchor(null)
+                    }}
+                  >
+                    <EditIcon fontSize="small" /> Edit
+                  </MenuItem>
+                  <MenuItem
+                    className={classes.deleteMenuItem}
+                    onClick={() => {
+                      if (menuPlan) setPendingPlanAction({ plan: menuPlan, kind: 'delete' })
+                      setPlanMenuAnchor(null)
+                    }}
+                  >
+                    Delete
+                  </MenuItem>
+                </Menu>
               </div>
-            </section>
-          </>
+            ) : null}
+          </section>
         }
       />
 
@@ -579,8 +630,7 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
         </div>
         {excludedPlans.length ? (
           <div className={classes.restore}>
-            <label className={classes.controlLabel}>
-              Excluded plans
+            <Field label="Excluded plans" className={classes.restoreField}>
               <span className={classes.restoreSelect}>
                 <Select value={restoreId} onChange={(event) => setRestoreId(event.target.value)}>
                   <option value="">Choose a plan</option>
@@ -591,7 +641,7 @@ export function ForecastPanel({ data, onSaved = async () => {} }: { data: StoreD
                   ))}
                 </Select>
               </span>
-            </label>
+            </Field>
             <Button disabled={!restoreId} onClick={restorePlan}>
               <RestoreIcon fontSize="small" /> Restore
             </Button>

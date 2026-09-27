@@ -15,6 +15,7 @@ import { formatDateLabel, todayIso } from '@/domain/money'
 import { holdingDate } from '@/domain/sip'
 import { StoreData } from '@/domain/types'
 import { equalWeightPerformance, findMarketMoments, marketMovements } from '@/features/holdings/marketMoments'
+import { hasConfirmedMarketValue, marketValueStatus } from '@/features/holdings/marketValueStatus'
 import { getMutualFundNavHistory } from '@/market/mutualFundNav.api'
 import { formatPrivateNumber, usePrivacy } from '@/privacy/privacy'
 import { tokens } from '@/theme/tokens'
@@ -61,6 +62,9 @@ const useStyles = createUseStyles({
   table: { width: '100%', borderCollapse: 'collapse', fontSize: tokens.font.sizeSm },
   cell: { padding: [tokens.space.sm, tokens.space.md], borderBottom: `1px solid ${tokens.color.border}`, textAlign: 'left' },
   head: { color: tokens.color.accent, background: tokens.color.bgMuted },
+  marketValue: { display: 'grid', gap: 2 },
+  marketMeta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs, whiteSpace: 'nowrap' },
+  marketFallback: { color: tokens.color.warning },
 })
 
 export function MutualFundInvestmentChart({ data }: { data: StoreData }) {
@@ -79,7 +83,7 @@ export function MutualFundInvestmentChart({ data }: { data: StoreData }) {
   const navQueries = useQueries({
     queries: holdings.map((holding) => ({
       queryKey: ['mutual-fund-nav', holding.name],
-      queryFn: ({ signal }: { signal: AbortSignal }) => getMutualFundNavHistory(holding.name, signal),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getMutualFundNavHistory(holding.name, signal, holding.avgPrice),
       staleTime: 24 * 60 * 60_000,
       retry: 1,
     })),
@@ -297,7 +301,12 @@ export function MutualFundInvestmentChart({ data }: { data: StoreData }) {
                     <MoneyText amountMinor={holding.investedMinor} />
                   </td>
                   <td className={classes.cell}>
-                    <MoneyText amountMinor={holding.currentMinor} />
+                    <div className={classes.marketValue}>
+                      <MoneyText amountMinor={holding.currentMinor} />
+                      <span className={`${classes.marketMeta} ${hasConfirmedMarketValue(holding) ? '' : classes.marketFallback}`}>
+                        {marketValueStatus(holding)}
+                      </span>
+                    </div>
                   </td>
                   <td className={classes.cell}>
                     <MoneyText amountMinor={holding.currentMinor - holding.investedMinor} tone="auto" />

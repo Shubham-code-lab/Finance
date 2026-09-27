@@ -3,9 +3,42 @@ import { tokens } from '@/theme/tokens'
 
 export const useUiStyles = createUseStyles({
   card: { borderRadius: tokens.radius.md, padding: tokens.space.lg, boxShadow: tokens.shadow.card },
-  button: { textTransform: 'none', minHeight: 32 },
-  input: { width: '100%' },
-  label: { display: 'grid', gap: tokens.space.xs, color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
+  button: {
+    height: `${tokens.control.height}px !important`,
+    minHeight: `${tokens.control.height}px !important`,
+    padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px !important`,
+  },
+  input: {
+    width: '100%',
+    '& .MuiOutlinedInput-input': { padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px` },
+    '& .MuiSelect-select': {
+      padding: `${tokens.control.paddingY}px ${tokens.control.selectIconSpace}px ${tokens.control.paddingY}px ${tokens.control.paddingX}px !important`,
+    },
+  },
+  label: {
+    display: 'grid',
+    gridTemplateColumns: `${tokens.form.labelWidth}px minmax(0, 1fr)`,
+    alignItems: 'center',
+    columnGap: tokens.form.labelGap,
+    minWidth: 0,
+    color: tokens.color.textMuted,
+    fontSize: tokens.font.sizeSm,
+  },
+  labelText: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: tokens.space.xs,
+    textAlign: 'left',
+  },
+  labelInfo: {
+    width: '1em !important',
+    height: '1em !important',
+    flex: '0 0 auto',
+    fontSize: '1em !important',
+    cursor: 'help',
+  },
+  fieldControl: { display: 'grid', gap: tokens.space.xs, minWidth: 0 },
   error: { color: tokens.color.danger, fontSize: tokens.font.sizeSm, lineHeight: 1.35 },
   money: { fontVariantNumeric: 'tabular-nums', fontWeight: tokens.font.weightMedium },
   moneyPositive: { color: tokens.color.positive },
@@ -19,6 +52,8 @@ export const useUiStyles = createUseStyles({
     gridTemplateRows: 'auto minmax(0, 1fr) auto',
     background: tokens.color.bgCard,
   },
+  drawerWide: { width: 'min(600px, 100vw)' },
+  drawerWithoutFooter: { gridTemplateRows: 'auto minmax(0, 1fr)' },
   drawerHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -28,6 +63,14 @@ export const useUiStyles = createUseStyles({
     borderBottom: `1px solid ${tokens.color.border}`,
   },
   drawerTitle: { margin: 0, fontSize: tokens.font.sizeLg },
+  drawerClose: {
+    width: `${tokens.control.iconButtonSize}px !important`,
+    minWidth: `${tokens.control.iconButtonSize}px !important`,
+    height: `${tokens.control.iconButtonSize}px !important`,
+    padding: '0 !important',
+    border: `1px solid ${tokens.color.border} !important`,
+    borderRadius: `${tokens.radius.sm}px !important`,
+  },
   drawerBody: { overflowY: 'auto', padding: tokens.space.lg },
   drawerFooter: {
     display: 'flex',
