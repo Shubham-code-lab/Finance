@@ -3,8 +3,7 @@ import { normalizeStockListState, recoverStockListState } from '@/domain/stockLi
 
 describe('stock list persistence', () => {
   it('recovers an empty cloud list from portfolio stocks', () => {
-    expect(recoverStockListState({ currentStocks: [], watchlists: [] }, [], [{ name: 'Tata Power', ticker: 'TATAPOWER.NS' }])).toEqual({
-      currentStocks: [{ name: 'Tata Power', ticker: 'TATAPOWER.NS' }],
+    expect(recoverStockListState({ watchlists: [] }, [], [{ name: 'Tata Power', ticker: 'TATAPOWER.NS' }])).toEqual({
       watchlists: [
         {
           id: 'recovered-investments',
@@ -15,27 +14,32 @@ describe('stock list persistence', () => {
     })
   })
 
-  it('normalizes current stocks and named watchlists', () => {
+  it('normalizes named watchlists and ignores temporary selections', () => {
     expect(
       normalizeStockListState({
         currentStocks: [{ name: ' Tata Power ', ticker: 'tatapower.ns' }],
         watchlists: [{ id: 'power', name: ' Power ', stocks: [{ name: 'NHPC', ticker: 'nhpc.ns' }] }],
       }),
     ).toEqual({
-      currentStocks: [{ name: 'Tata Power', ticker: 'TATAPOWER.NS' }],
       watchlists: [{ id: 'power', name: 'Power', stocks: [{ name: 'NHPC', ticker: 'NHPC.NS' }] }],
     })
   })
 
-  it('removes invalid and duplicate symbols', () => {
+  it('removes invalid and duplicate watchlist symbols', () => {
     expect(
       normalizeStockListState({
-        currentStocks: [
-          { name: 'NHPC', ticker: 'NHPC.NS' },
-          { name: 'Duplicate', ticker: 'nhpc.ns' },
-          { name: '', ticker: 'BAD.NS' },
+        watchlists: [
+          {
+            id: 'power',
+            name: 'Power',
+            stocks: [
+              { name: 'NHPC', ticker: 'NHPC.NS' },
+              { name: 'Duplicate', ticker: 'nhpc.ns' },
+              { name: '', ticker: 'BAD.NS' },
+            ],
+          },
         ],
-      }).currentStocks,
+      }).watchlists[0].stocks,
     ).toEqual([{ name: 'NHPC', ticker: 'NHPC.NS' }])
   })
 })

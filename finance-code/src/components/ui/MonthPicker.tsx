@@ -13,7 +13,8 @@ const useStyles = createUseStyles({
   root: { width: '100%', minWidth: 0 },
   trigger: {
     width: '100%',
-    minHeight: 40,
+    minHeight: tokens.control.height,
+    padding: `${tokens.control.paddingY}px ${tokens.control.paddingX}px !important`,
     justifyContent: 'flex-start',
     textTransform: 'none',
     whiteSpace: 'nowrap',
@@ -27,10 +28,10 @@ const useStyles = createUseStyles({
   },
   paper: {
     marginTop: tokens.space.xs,
-    padding: tokens.space.md,
-    width: 288,
+    width: 260,
     maxWidth: 'calc(100vw - 24px)',
     boxSizing: 'border-box',
+    padding: tokens.space.sm,
     color: `${tokens.color.text} !important`,
     backgroundColor: `${tokens.color.bgCard} !important`,
     backgroundImage: 'none !important',
@@ -38,18 +39,13 @@ const useStyles = createUseStyles({
     borderRadius: `${tokens.radius.md}px !important`,
     boxShadow: '0 18px 48px rgba(0, 0, 0, 0.4) !important',
   },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: tokens.space.sm,
-  },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space.sm },
   year: { fontSize: tokens.font.sizeMd, fontWeight: tokens.font.weightMedium },
   arrow: { color: `${tokens.color.textMuted} !important` },
   months: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.space.xs },
   month: {
     minWidth: 0,
-    minHeight: 40,
+    minHeight: 32,
     border: 0,
     borderRadius: tokens.radius.sm,
     background: 'transparent',
@@ -66,25 +62,24 @@ const useStyles = createUseStyles({
   },
 })
 
-export function EffectiveMonthPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function MonthPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const classes = useStyles()
   const selectedYear = Number(value.slice(0, 4)) || new Date().getFullYear()
   const selectedMonth = Number(value.slice(5, 7)) || 1
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null)
   const [visibleYear, setVisibleYear] = useState(selectedYear)
 
-  const openPicker = (element: HTMLButtonElement) => {
-    setVisibleYear(selectedYear)
-    setAnchorEl(element)
-  }
-
   return (
     <div className={classes.root}>
       <Button
         className={classes.trigger}
+        type="button"
         variant="outlined"
         startIcon={<CalendarMonthIcon fontSize="small" />}
-        onClick={(event) => openPicker(event.currentTarget)}
+        onClick={(event) => {
+          setVisibleYear(selectedYear)
+          setAnchorEl(event.currentTarget)
+        }}
         aria-haspopup="dialog"
         aria-expanded={Boolean(anchorEl)}
       >

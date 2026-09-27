@@ -1,6 +1,9 @@
 import { startTransition, useEffect, useMemo, useState } from 'react'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore'
 import { Chip, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import { useQueries } from '@tanstack/react-query'
 import { createUseStyles } from 'react-jss'
@@ -35,6 +38,8 @@ import { useStockCloses } from '@/query/useStockCloses'
 import { tokens } from '@/theme/tokens'
 
 type ChartMode = 'value' | 'price' | 'percent'
+type PerformanceSortKey = 'company' | 'purchased' | 'invested' | 'startPrice' | 'endPrice' | 'rangeReturn' | 'endValue' | 'pnl'
+type PerformanceSort = { key: PerformanceSortKey; direction: 'asc' | 'desc' }
 
 const colors = ['#8db7ff', '#42b883', '#ff9fca', '#e5c463', '#ff7a76', '#72d6dd', '#b89cff', '#b8d97a']
 const seriesColorStyles = Object.fromEntries(
@@ -72,6 +77,7 @@ const useStyles = createUseStyles({
   chart: { height: 380, minWidth: 0, '@media (max-width: 720px)': { height: 330 } },
   empty: { padding: tokens.space.xl, color: tokens.color.textMuted, textAlign: 'center' },
   error: { color: tokens.color.negative, fontSize: tokens.font.sizeSm },
+  warning: { color: tokens.color.warning, fontSize: tokens.font.sizeSm },
   tableWrap: { overflowX: 'auto', border: `1px solid ${tokens.color.border}`, borderRadius: tokens.radius.sm },
   table: { width: 'max-content', minWidth: '100%', borderCollapse: 'collapse', fontSize: tokens.font.sizeSm },
   th: {
@@ -82,6 +88,22 @@ const useStyles = createUseStyles({
     textAlign: 'left',
     whiteSpace: 'nowrap',
   },
+  sortHeader: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.space.xs,
+    padding: 0,
+    border: 0,
+    background: 'transparent',
+    color: 'inherit',
+    font: 'inherit',
+    fontWeight: 'inherit',
+    cursor: 'pointer',
+    '& svg': { fontSize: 16, color: tokens.color.textMuted },
+    '&:hover, &:focus-visible': { color: tokens.color.text, outline: 0 },
+    '&:focus-visible': { textDecoration: 'underline' },
+  },
+  sortActive: { '& svg': { color: tokens.color.accent } },
   td: { padding: [tokens.space.sm, tokens.space.md], borderBottom: `1px solid ${tokens.color.border}`, whiteSpace: 'nowrap' },
   company: { display: 'grid', gap: 2, '& small': { color: tokens.color.textMuted } },
   positive: { color: tokens.color.positive },
@@ -116,6 +138,7 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
   const [mode, setMode] = useState<ChartMode>('percent')
   const [highlightedIds, setHighlightedIds] = useState<string[]>([])
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [performanceSort, setPerformanceSort] = useState<PerformanceSort>({ key: 'rangeReturn', direction: 'desc' })
   const selected = holdings
   const quotes = useStockCloses(selected, today)
   const results = quotes.data ?? {}
@@ -209,14 +232,37 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
     setHighlightedIds((current) => current.filter((id) => holdings.some((holding) => holding.id === id)))
   }, [holdings])
 
-  const tableRows = selected.map((holding) => {
-    const closes = (results[holding.id]?.closes ?? []).filter((point) => point.date >= range.from && point.date <= range.to)
-    const first = closes[0]
-    const last = closes.at(-1)
-    const performance = calculateStockPerformance(holding, results[holding.id]?.closes ?? [], range).at(-1)
-    const rangeReturn = first && last ? last.closeMinor / first.closeMinor - 1 : null
-    return { holding, first, last, performance, rangeReturn }
-  })
+  const tableRows = useMemo(() => {
+    const rows = selected.map((holding) => {
+      const closes = (results[holding.id]?.closes ?? []).filter((point) => point.date >= range.from && point.date <= range.to)
+      const first = closes[0]
+      const last = closes.at(-1)
+      const performance = calculateStockPerformance(holding, results[holding.id]?.closes ?? [], range).at(-1)
+      const rangeReturn = first && last ? last.closeMinor / first.closeMinor - 1 : null
+      return { holding, first, last, performance, rangeReturn }
+    })
+    const value = (row: (typeof rows)[number]): string | number | null => {
+      if (performanceSort.key === 'company') return row.holding.name.toLocaleLowerCase()
+      if (performanceSort.key === 'purchased') return row.holding.buyDate ?? null
+      if (performanceSort.key === 'invested') return row.holding.investedMinor
+      if (performanceSort.key === 'startPrice') return row.first?.closeMinor ?? null
+      if (performanceSort.key === 'endPrice') return row.last?.closeMinor ?? null
+      if (performanceSort.key === 'rangeReturn') return row.rangeReturn
+      if (performanceSort.key === 'endValue') return row.performance?.valueMinor ?? null
+      return row.performance?.pnlMinor ?? null
+    }
+    return [...rows].sort((left, right) => {
+      const leftValue = value(left)
+      const rightValue = value(right)
+      if (leftValue === null) return rightValue === null ? 0 : 1
+      if (rightValue === null) return -1
+      const compared =
+        typeof leftValue === 'string' && typeof rightValue === 'string'
+          ? leftValue.localeCompare(rightValue)
+          : Number(leftValue) - Number(rightValue)
+      return performanceSort.direction === 'asc' ? compared : -compared
+    })
+  }, [performanceSort, range, results, selected])
 
   const sectorData = useMemo(() => {
     const grouped = new Map<string, { holdings: Holding[]; value: number }>()
@@ -242,7 +288,31 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
   const toggleStock = (id: string) =>
     setHighlightedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
   const errors = selected.flatMap((holding) => (results[holding.id]?.error ? [results[holding.id].error] : []))
+  const warnings = selected.flatMap((holding) => (results[holding.id]?.warning ? [results[holding.id].warning] : []))
   const tooltipKind = mode === 'percent' ? 'percent' : 'money'
+  const togglePerformanceSort = (key: PerformanceSortKey) => {
+    setPerformanceSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: key === 'company' ? 'asc' : 'desc' },
+    )
+  }
+  const performanceHeader = (key: PerformanceSortKey, label: string) => {
+    const active = performanceSort.key === key
+    const icon = !active ? <UnfoldMoreIcon /> : performanceSort.direction === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />
+    return (
+      <th className={classes.th} aria-sort={active ? (performanceSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button
+          type="button"
+          className={`${classes.sortHeader} ${active ? classes.sortActive : ''}`}
+          onClick={() => togglePerformanceSort(key)}
+          aria-label={`Sort by ${label}`}
+        >
+          {label} {icon}
+        </button>
+      </th>
+    )
+  }
 
   return (
     <div className={classes.root}>
@@ -287,6 +357,12 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
           <div className={classes.error}>
             {errors[0]}
             {errors.length > 1 ? ` (+${errors.length - 1} more)` : ''}
+          </div>
+        ) : null}
+        {warnings.length ? (
+          <div className={classes.warning}>
+            {warnings[0]}
+            {warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}
           </div>
         ) : null}
         {quotes.isLoading ? (
@@ -386,14 +462,14 @@ export function StockInvestmentChart({ data }: { data: StoreData }) {
           <table className={classes.table}>
             <thead>
               <tr>
-                <th className={classes.th}>Company</th>
-                <th className={classes.th}>Purchased</th>
-                <th className={classes.th}>Invested</th>
-                <th className={classes.th}>Start price</th>
-                <th className={classes.th}>End price</th>
-                <th className={classes.th}>Range return</th>
-                <th className={classes.th}>End value</th>
-                <th className={classes.th}>P/L vs cost</th>
+                {performanceHeader('company', 'Company')}
+                {performanceHeader('purchased', 'Purchased')}
+                {performanceHeader('invested', 'Invested')}
+                {performanceHeader('startPrice', 'Start price')}
+                {performanceHeader('endPrice', 'End price')}
+                {performanceHeader('rangeReturn', 'Range return')}
+                {performanceHeader('endValue', 'End value')}
+                {performanceHeader('pnl', 'P/L vs cost')}
               </tr>
             </thead>
             <tbody>

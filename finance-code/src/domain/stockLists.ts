@@ -1,8 +1,7 @@
 export type StockListSymbol = { name: string; ticker: string; sector?: string; industry?: string }
 export type SavedStockList = { id: string; name: string; stocks: StockListSymbol[] }
-export type StockListState = { currentStocks: StockListSymbol[]; watchlists: SavedStockList[] }
+export type StockListState = { watchlists: SavedStockList[] }
 
-const MAX_CURRENT_STOCKS = 20
 const MAX_WATCHLISTS = 100
 const MAX_WATCHLIST_STOCKS = 20
 
@@ -31,7 +30,7 @@ function normalizeSymbols(value: unknown, limit: number) {
 }
 
 export function normalizeStockListState(value: unknown): StockListState {
-  if (!value || typeof value !== 'object') return { currentStocks: [], watchlists: [] }
+  if (!value || typeof value !== 'object') return { watchlists: [] }
   const candidate = value as Partial<StockListState>
   const watchlists = Array.isArray(candidate.watchlists)
     ? candidate.watchlists.flatMap((item): SavedStockList[] => {
@@ -43,10 +42,7 @@ export function normalizeStockListState(value: unknown): StockListState {
         return id && name && stocks.length ? [{ id, name, stocks }] : []
       })
     : []
-  return {
-    currentStocks: normalizeSymbols(candidate.currentStocks, MAX_CURRENT_STOCKS),
-    watchlists: watchlists.slice(0, MAX_WATCHLISTS),
-  }
+  return { watchlists: watchlists.slice(0, MAX_WATCHLISTS) }
 }
 
 export function recoverStockListState(
@@ -54,14 +50,13 @@ export function recoverStockListState(
   legacyWatchlists: SavedStockList[],
   portfolioStocks: StockListSymbol[],
 ): StockListState {
-  const recovery = normalizeStockListState({ currentStocks: portfolioStocks, watchlists: legacyWatchlists })
-  const currentStocks = cloud?.currentStocks.length ? cloud.currentStocks : recovery.currentStocks
+  const recovery = normalizeStockListState({ watchlists: legacyWatchlists })
   const watchlists = cloud?.watchlists.length
     ? cloud.watchlists
     : recovery.watchlists.length
       ? recovery.watchlists
-      : currentStocks.length
-        ? [{ id: 'recovered-investments', name: 'Recovered investments', stocks: currentStocks }]
+      : portfolioStocks.length
+        ? [{ id: 'recovered-investments', name: 'Recovered investments', stocks: normalizeSymbols(portfolioStocks, MAX_WATCHLIST_STOCKS) }]
         : []
-  return { currentStocks, watchlists }
+  return { watchlists }
 }

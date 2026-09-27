@@ -1,17 +1,17 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { createUseStyles } from 'react-jss'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { PaginationBar } from '@/components/PaginationBar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { Button, Card, Drawer, ErrorText, Field, Input, MoneyText, Row, Select } from '@/components/ui'
+import { Button, Card, DatePicker, Drawer, ErrorText, Field, Input, MoneyText, Row, Select } from '@/components/ui'
 import { formatDateLabel, formatMonthLabel, toMinor, todayIso } from '@/domain/money'
 import { IncomeSchedule, IncomeSource, StoreData } from '@/domain/types'
 import { deleteIncomeSource, upsertAccount, upsertAccountSnapshot, upsertIncomeSource } from '@/storage/repository'
 import { tokens } from '@/theme/tokens'
+import { usePageHeaderAction } from '@/app/PageHeaderAction'
 
 const useStyles = createUseStyles({
   page: { display: 'grid', gap: tokens.space.md },
-  hint: { color: tokens.color.textMuted, fontSize: tokens.font.sizeSm, lineHeight: 1.4 },
   form: { display: 'grid', gap: tokens.space.md },
   gridWrap: {
     overflow: 'auto',
@@ -29,9 +29,7 @@ const useStyles = createUseStyles({
   },
   td: { padding: [tokens.space.sm, tokens.space.md], borderBottom: `1px solid ${tokens.color.border}` },
   row: { '&:nth-child(even)': { background: tokens.color.bgCard }, '&:hover': { background: tokens.color.accentSoft } },
-  head: { display: 'flex', justifyContent: 'space-between', gap: tokens.space.md, alignItems: 'center' },
   meta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeSm },
-  formHint: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs, lineHeight: 1.4, marginTop: tokens.space.xs },
 })
 
 function blankForm(accountId: string) {
@@ -56,6 +54,7 @@ export function IncomeView({ data, onSaved }: { data: StoreData; onSaved: () => 
   const [pageSize, setPageSize] = useState(12)
   const [pendingRemove, setPendingRemove] = useState<IncomeSource | null>(null)
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -99,10 +98,12 @@ export function IncomeView({ data, onSaved }: { data: StoreData; onSaved: () => 
     setDrawer({ id: source.id })
   }
 
-  const addSource = () => {
+  const addSource = useCallback(() => {
     reset(blankForm(bankId))
     setDrawer({})
-  }
+  }, [bankId, reset])
+
+  usePageHeaderAction('Add income', addSource)
 
   const moveToSaving = async (source: IncomeSource) => {
     const accountId = crypto.randomUUID()
@@ -129,17 +130,6 @@ export function IncomeView({ data, onSaved }: { data: StoreData; onSaved: () => 
 
   return (
     <div className={classes.page}>
-      <Card>
-        <div className={classes.head}>
-          <p className={classes.hint}>
-            Income is only salary or real earning you declare here. If a one-time row is actually money kept somewhere else, move it to
-            saving so it becomes a cash account balance instead of income.
-          </p>
-          <Button variant="primary" onClick={addSource}>
-            Add income
-          </Button>
-        </div>
-      </Card>
       <Card>
         <div className={classes.gridWrap}>
           <table className={classes.table}>
@@ -215,14 +205,9 @@ export function IncomeView({ data, onSaved }: { data: StoreData; onSaved: () => 
           title={drawer.id ? 'Edit income' : 'Add income'}
           onClose={() => setDrawer(null)}
           footer={
-            <>
-              <Button type="button" onClick={() => setDrawer(null)}>
-                Cancel
-              </Button>
-              <Button variant="primary" type="submit" form="income-form">
-                Save
-              </Button>
-            </>
+            <Button variant="primary" type="submit" form="income-form">
+              Save
+            </Button>
           }
         >
           <form id="income-form" className={classes.form} onSubmit={handleSubmit(saveIncome)}>
@@ -259,22 +244,24 @@ export function IncomeView({ data, onSaved }: { data: StoreData; onSaved: () => 
               </Select>
               <ErrorText>{errors.schedule?.message}</ErrorText>
             </Field>
-            <Field label={schedule === 'monthly' ? 'Schedule starts' : 'Payment date'}>
-              <Input
-                type="date"
-                {...register('startDate', {
-                  required: schedule === 'monthly' ? 'Schedule start date is required.' : 'Payment date is required.',
-                })}
-              />
-              <span className={classes.formHint}>
-                {schedule === 'monthly'
+            <Field
+              label={schedule === 'monthly' ? 'Schedule starts' : 'Payment date'}
+              hint={
+                schedule === 'monthly'
                   ? 'The first month this salary is included in the dashboard and future projection.'
-                  : 'The date this one-time income is received.'}
-              </span>
+                  : 'The date this one-time income is received.'
+              }
+            >
+              <Controller
+                control={control}
+                name="startDate"
+                rules={{ required: schedule === 'monthly' ? 'Schedule start date is required.' : 'Payment date is required.' }}
+                render={({ field }) => <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />}
+              />
               <ErrorText>{errors.startDate?.message}</ErrorText>
             </Field>
             {schedule === 'monthly' ? (
-              <Field label="Salary day">
+              <Field label="Salary day" hint="Use 31 when salary arrives on the last calendar day.">
                 <Input
                   type="number"
                   min={1}
@@ -284,7 +271,6 @@ export function IncomeView({ data, onSaved }: { data: StoreData; onSaved: () => 
                       schedule !== 'monthly' || (Number(value) >= 1 && Number(value) <= 31) || 'Day must be between 1 and 31.',
                   })}
                 />
-                <span className={classes.formHint}>Use 31 when salary arrives on the last calendar day.</span>
                 <ErrorText>{errors.dayOfMonth?.message}</ErrorText>
               </Field>
             ) : null}

@@ -184,6 +184,8 @@ export type Holding = {
   buyDate?: string | null
   avgPrice: number | null
   marketPrice: number | null
+  marketPriceAsOf?: string | null
+  marketPriceSource?: 'market' | 'import'
   sipAmountMinor: number | null
   sipDayOfMonth: number | null
   sipStartMonth: string | null

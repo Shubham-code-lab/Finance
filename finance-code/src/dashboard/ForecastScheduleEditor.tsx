@@ -1,17 +1,20 @@
 import { FormEvent, ReactNode, useState } from 'react'
 import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
+import { IconButton, Menu, MenuItem, Tab, Tabs } from '@mui/material'
 import { createUseStyles } from 'react-jss'
-import { Button, Drawer, ErrorText, Input, MoneyText } from '@/components/ui'
+import { Button, Drawer, ErrorText, Field, Input, MoneyText, MonthPicker } from '@/components/ui'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { normalizeForecastAdjustments } from '@/calc/forecastAdjustments'
 import { formatMonthLabel, toMinor, todayIso } from '@/domain/money'
 import { ForecastAdjustment } from '@/domain/types'
 import { addMonths } from '@/domain/sip'
 import { tokens } from '@/theme/tokens'
-import { EffectiveMonthPicker } from '@/dashboard/EffectiveMonthPicker'
+import { ForecastInfoTip } from '@/dashboard/ForecastInfoTip'
 
 type Draft = { effectiveMonth: string; salary: string; livingCost: string; mutualFundSip: string; stockSip: string }
+export type PlannerSection = 'assumptions' | 'plans' | 'changes'
 
 function blankDraft(): Draft {
   return { effectiveMonth: addMonths(todayIso().slice(0, 7), 1), salary: '', livingCost: '', mutualFundSip: '', stockSip: '' }
@@ -30,23 +33,19 @@ const useStyles = createUseStyles({
     borderRadius: tokens.radius.md,
     background: tokens.color.bgCard,
   },
-  heading: { display: 'grid', gap: tokens.space.xs },
+  heading: { display: 'flex', alignItems: 'center', gap: tokens.space.xs },
   title: { margin: 0, fontSize: tokens.font.sizeMd },
-  help: { margin: 0, color: tokens.color.textMuted, fontSize: tokens.font.sizeXs, lineHeight: 1.45 },
   form: { display: 'grid', gap: tokens.space.sm },
   fieldGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: tokens.space.sm,
   },
   field: {
-    display: 'grid',
-    gap: tokens.space.xs,
+    width: 296,
     minWidth: 0,
-    color: tokens.color.textMuted,
-    fontSize: tokens.font.sizeXs,
-    fontWeight: tokens.font.weightMedium,
+    maxWidth: '100%',
   },
+  effectiveMonthField: { width: 320 },
   list: { display: 'grid', gap: tokens.space.sm },
   row: {
     display: 'grid',
@@ -70,23 +69,60 @@ const useStyles = createUseStyles({
     background: tokens.color.bgMuted,
     '& small': { color: tokens.color.textMuted },
   },
-  drawerIntro: { margin: 0, color: tokens.color.textMuted, fontSize: tokens.font.sizeSm, lineHeight: 1.5 },
-  drawerSection: { display: 'grid', gap: tokens.space.sm, paddingTop: tokens.space.md, borderTop: `1px solid ${tokens.color.border}` },
+  drawerLayout: { display: 'grid', gap: tokens.space.lg },
+  drawerTabs: {
+    position: 'sticky',
+    top: -tokens.space.lg,
+    zIndex: 2,
+    margin: [-tokens.space.lg, -tokens.space.lg, 0],
+    padding: [0, tokens.space.lg],
+    borderBottom: `1px solid ${tokens.color.border}`,
+    background: tokens.color.bgCard,
+    '& .MuiTabs-root': { minHeight: 42 },
+    '& .MuiTabs-flexContainer': { gap: tokens.space.xs },
+    '& .MuiTab-root': {
+      minHeight: 42,
+      minWidth: 0,
+      padding: [tokens.space.sm, tokens.space.md],
+      color: tokens.color.textMuted,
+      fontSize: tokens.font.sizeSm,
+      textTransform: 'none',
+    },
+    '& .Mui-selected': { color: `${tokens.color.text} !important` },
+    '& .MuiTabs-indicator': { height: 2, borderRadius: [2, 2, 0, 0], background: tokens.color.accent },
+  },
+  drawerPanel: { display: 'grid', gap: tokens.space.md },
+  drawerSection: { display: 'grid', gap: tokens.space.md },
+  drawerSectionHead: { display: 'flex', alignItems: 'center', gap: tokens.space.xs },
   drawerSectionTitle: { margin: 0, fontSize: tokens.font.sizeMd },
+  infoButton: { color: `${tokens.color.textMuted} !important` },
   drawerSchedule: { display: 'grid', gap: tokens.space.sm, marginTop: tokens.space.lg },
   drawerScheduleTitle: { margin: 0, fontSize: tokens.font.sizeSm },
   drawerRow: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gridTemplateColumns: '110px minmax(0, 1fr) auto',
     alignItems: 'center',
     gap: tokens.space.sm,
     padding: tokens.space.sm,
     border: `1px solid ${tokens.color.border}`,
     borderRadius: tokens.radius.sm,
   },
-  rowActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: tokens.space.xs },
-  editButton: { minWidth: '36px !important', width: 36, padding: '4px !important' },
-  deleteButton: { minWidth: '36px !important', width: 36, padding: '4px !important' },
+  drawerRowSummary: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.space.sm,
+    minWidth: 0,
+    overflow: 'hidden',
+    color: tokens.color.textMuted,
+    fontSize: tokens.font.sizeXs,
+    whiteSpace: 'nowrap',
+    '& > span': { display: 'inline-flex', gap: tokens.space.xs },
+  },
+  moreButton: {
+    width: `${tokens.control.iconButtonSize}px !important`,
+    height: `${tokens.control.iconButtonSize}px !important`,
+  },
+  deleteMenuItem: { color: `${tokens.color.danger} !important` },
 })
 
 export function ForecastScheduleEditor({
@@ -95,12 +131,22 @@ export function ForecastScheduleEditor({
   drawerOpen,
   onDrawerOpenChange,
   drawerContentBefore,
+  drawerPlans,
+  drawerAssumptionsAction,
+  drawerPlansAction,
+  activeSection,
+  onActiveSectionChange,
 }: {
   adjustments: ForecastAdjustment[]
   onChange: (next: ForecastAdjustment[]) => Promise<void>
   drawerOpen: boolean
   onDrawerOpenChange: (open: boolean) => void
   drawerContentBefore?: ReactNode
+  drawerPlans?: ReactNode
+  drawerAssumptionsAction?: ReactNode
+  drawerPlansAction?: ReactNode
+  activeSection: PlannerSection
+  onActiveSectionChange: (section: PlannerSection) => void
 }) {
   const classes = useStyles()
   const [draft, setDraft] = useState<Draft>(blankDraft)
@@ -108,6 +154,8 @@ export function ForecastScheduleEditor({
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [pendingRemoveMonth, setPendingRemoveMonth] = useState<string | null>(null)
+  const [changeMenuAnchor, setChangeMenuAnchor] = useState<HTMLElement | null>(null)
+  const [menuAdjustment, setMenuAdjustment] = useState<ForecastAdjustment | null>(null)
   const sorted = normalizeForecastAdjustments(adjustments)
 
   const save = async (event: FormEvent) => {
@@ -177,17 +225,20 @@ export function ForecastScheduleEditor({
     })
   }
 
-  const cancelEdit = () => {
+  const closeDrawer = () => {
+    setDraft(blankDraft())
     setEditingMonth(null)
     setError('')
-    setDraft(blankDraft())
+    setChangeMenuAnchor(null)
+    setMenuAdjustment(null)
+    onDrawerOpenChange(false)
   }
 
   return (
     <section className={classes.root}>
       <div className={classes.heading}>
         <h3 className={classes.title}>Future monthly changes</h3>
-        <p className={classes.help}>Scheduled changes are applied from their effective month onward.</p>
+        <ForecastInfoTip className={classes.infoButton} label="Scheduled changes are applied from their effective month onward." />
       </div>
       <ErrorText>{error}</ErrorText>
       {sorted.length ? (
@@ -228,111 +279,165 @@ export function ForecastScheduleEditor({
       {drawerOpen ? (
         <Drawer
           title="Manage wealth planner"
-          onClose={() => onDrawerOpenChange(false)}
+          onClose={closeDrawer}
+          cancelDisabled={saving}
+          wide
           footer={
-            <Button type="button" disabled={saving} onClick={() => onDrawerOpenChange(false)}>
-              Close
-            </Button>
+            activeSection === 'assumptions' ? (
+              drawerAssumptionsAction
+            ) : activeSection === 'plans' ? (
+              drawerPlansAction
+            ) : (
+              <Button type="submit" form="forecast-change-form" variant="primary" disabled={saving}>
+                {saving ? 'Saving' : editingMonth ? 'Update change' : 'Add change'}
+              </Button>
+            )
           }
         >
-          {drawerContentBefore}
-          <section className={classes.drawerSection}>
-            <h3 className={classes.drawerSectionTitle}>Future monthly changes</h3>
-            <p className={classes.drawerIntro}>Blank fields keep the previous value. Enter 0 to stop a cost or SIP.</p>
-            <form id="forecast-change-form" className={classes.form} onSubmit={save}>
-              <div className={classes.fieldGrid}>
-                <label className={classes.field}>
-                  Effective month
-                  <EffectiveMonthPicker
-                    value={draft.effectiveMonth}
-                    onChange={(effectiveMonth) => setDraft((current) => ({ ...current, effectiveMonth }))}
-                  />
-                </label>
-                <label className={classes.field}>
-                  Salary / month
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={draft.salary}
-                    onChange={(event) => setDraft((current) => ({ ...current, salary: event.target.value }))}
-                  />
-                </label>
-                <label className={classes.field}>
-                  Living cost / month
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={draft.livingCost}
-                    onChange={(event) => setDraft((current) => ({ ...current, livingCost: event.target.value }))}
-                  />
-                </label>
-                <label className={classes.field}>
-                  MF SIP / month
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={draft.mutualFundSip}
-                    onChange={(event) => setDraft((current) => ({ ...current, mutualFundSip: event.target.value }))}
-                  />
-                </label>
-                <label className={classes.field}>
-                  Stock SIP / month
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={draft.stockSip}
-                    onChange={(event) => setDraft((current) => ({ ...current, stockSip: event.target.value }))}
-                  />
-                </label>
+          <div className={classes.drawerLayout}>
+            <div className={classes.drawerTabs}>
+              <Tabs
+                value={activeSection}
+                onChange={(_event, section: PlannerSection) => onActiveSectionChange(section)}
+                variant="fullWidth"
+                aria-label="Wealth planner settings"
+              >
+                <Tab value="assumptions" label="Assumptions" />
+                <Tab value="plans" label="Plans" />
+                <Tab value="changes" label="Monthly changes" />
+              </Tabs>
+            </div>
+            {activeSection === 'assumptions' ? (
+              <div className={classes.drawerPanel} role="tabpanel">
+                {drawerContentBefore}
               </div>
-              <span className={classes.rowActions}>
-                {editingMonth ? (
-                  <Button type="button" disabled={saving} onClick={cancelEdit}>
-                    Cancel edit
-                  </Button>
-                ) : null}
-                <Button type="submit" variant="primary" disabled={saving}>
-                  {saving ? 'Saving' : editingMonth ? 'Update change' : 'Add change'}
-                </Button>
-              </span>
-            </form>
-            <ErrorText>{error}</ErrorText>
-            {sorted.length ? (
-              <section className={classes.drawerSchedule}>
-                <h4 className={classes.drawerScheduleTitle}>Scheduled changes</h4>
-                {sorted.map((adjustment) => (
-                  <div className={classes.drawerRow} key={adjustment.effectiveMonth}>
-                    <strong>{formatMonthLabel(adjustment.effectiveMonth)}</strong>
-                    <span className={classes.rowActions}>
-                      <Button
-                        type="button"
-                        className={classes.editButton}
-                        disabled={saving}
-                        onClick={() => edit(adjustment)}
-                        aria-label={`Edit change from ${formatMonthLabel(adjustment.effectiveMonth)}`}
-                      >
-                        <EditIcon fontSize="small" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        className={classes.deleteButton}
-                        disabled={saving}
-                        onClick={() => setPendingRemoveMonth(adjustment.effectiveMonth)}
-                        aria-label={`Remove change from ${formatMonthLabel(adjustment.effectiveMonth)}`}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </Button>
-                    </span>
+            ) : null}
+            {activeSection === 'plans' ? (
+              <div className={classes.drawerPanel} role="tabpanel">
+                {drawerPlans}
+              </div>
+            ) : null}
+            {activeSection === 'changes' ? (
+              <section className={classes.drawerSection} role="tabpanel">
+                <div className={classes.drawerSectionHead}>
+                  <h3 className={classes.drawerSectionTitle}>Schedule a monthly change</h3>
+                  <ForecastInfoTip
+                    className={classes.infoButton}
+                    label="Blank fields keep their previous value. Enter 0 to stop a cost or SIP from the effective month."
+                  />
+                </div>
+                <form id="forecast-change-form" className={classes.form} onSubmit={save}>
+                  <div className={classes.fieldGrid}>
+                    <Field label="Effective month" className={`${classes.field} ${classes.effectiveMonthField}`}>
+                      <MonthPicker
+                        value={draft.effectiveMonth}
+                        onChange={(effectiveMonth) => setDraft((current) => ({ ...current, effectiveMonth }))}
+                      />
+                    </Field>
+                    <Field label="Salary / month" className={classes.field}>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={draft.salary}
+                        onChange={(event) => setDraft((current) => ({ ...current, salary: event.target.value }))}
+                      />
+                    </Field>
+                    <Field label="Living cost / month" className={classes.field}>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={draft.livingCost}
+                        onChange={(event) => setDraft((current) => ({ ...current, livingCost: event.target.value }))}
+                      />
+                    </Field>
+                    <Field label="MF SIP / month" className={classes.field}>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={draft.mutualFundSip}
+                        onChange={(event) => setDraft((current) => ({ ...current, mutualFundSip: event.target.value }))}
+                      />
+                    </Field>
+                    <Field label="Stock SIP / month" className={classes.field}>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={draft.stockSip}
+                        onChange={(event) => setDraft((current) => ({ ...current, stockSip: event.target.value }))}
+                      />
+                    </Field>
                   </div>
-                ))}
+                </form>
+                <ErrorText>{error}</ErrorText>
+                {sorted.length ? (
+                  <section className={classes.drawerSchedule}>
+                    <h4 className={classes.drawerScheduleTitle}>Scheduled changes</h4>
+                    {sorted.map((adjustment) => (
+                      <div className={classes.drawerRow} key={adjustment.effectiveMonth}>
+                        <strong>{formatMonthLabel(adjustment.effectiveMonth)}</strong>
+                        <span className={classes.drawerRowSummary}>
+                          {adjustment.salaryMinor !== undefined ? (
+                            <span>
+                              Salary <MoneyText amountMinor={adjustment.salaryMinor} />
+                            </span>
+                          ) : null}
+                          {adjustment.livingCostMinor !== undefined ? (
+                            <span>
+                              Living <MoneyText amountMinor={adjustment.livingCostMinor} />
+                            </span>
+                          ) : null}
+                          {adjustment.mutualFundSipMinor !== undefined ? (
+                            <span>
+                              MF SIP <MoneyText amountMinor={adjustment.mutualFundSipMinor} />
+                            </span>
+                          ) : null}
+                          {adjustment.stockSipMinor !== undefined ? (
+                            <span>
+                              Stock SIP <MoneyText amountMinor={adjustment.stockSipMinor} />
+                            </span>
+                          ) : null}
+                        </span>
+                        <IconButton
+                          className={classes.moreButton}
+                          disabled={saving}
+                          aria-label={`Actions for ${formatMonthLabel(adjustment.effectiveMonth)}`}
+                          onClick={(event) => {
+                            setMenuAdjustment(adjustment)
+                            setChangeMenuAnchor(event.currentTarget)
+                          }}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </div>
+                    ))}
+                    <Menu anchorEl={changeMenuAnchor} open={Boolean(changeMenuAnchor)} onClose={() => setChangeMenuAnchor(null)}>
+                      <MenuItem
+                        onClick={() => {
+                          if (menuAdjustment) edit(menuAdjustment)
+                          setChangeMenuAnchor(null)
+                        }}
+                      >
+                        <EditIcon fontSize="small" /> Edit
+                      </MenuItem>
+                      <MenuItem
+                        className={classes.deleteMenuItem}
+                        onClick={() => {
+                          if (menuAdjustment) setPendingRemoveMonth(menuAdjustment.effectiveMonth)
+                          setChangeMenuAnchor(null)
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" /> Delete
+                      </MenuItem>
+                    </Menu>
+                  </section>
+                ) : null}
               </section>
             ) : null}
-          </section>
+          </div>
         </Drawer>
       ) : null}
       <ConfirmDialog

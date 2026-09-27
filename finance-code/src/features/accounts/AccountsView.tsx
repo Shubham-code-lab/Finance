@@ -1,18 +1,19 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { createUseStyles } from 'react-jss'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { PaginationBar } from '@/components/PaginationBar'
 import { accountBalanceAt } from '@/calc/calculations'
-import { Button, Card, Drawer, ErrorText, Field, Input, MoneyText, Select } from '@/components/ui'
+import { Button, Card, DatePicker, Drawer, ErrorText, Field, Input, MoneyText, Select } from '@/components/ui'
 import { toMinor, todayIso } from '@/domain/money'
 import { Account, AccountType, StoreData } from '@/domain/types'
 import { upsertAccount, upsertAccountSnapshot } from '@/storage/repository'
 import { tokens } from '@/theme/tokens'
 import { StatementCoverage } from '@/features/accounts/StatementCoverage'
+import { portfolioMarketValueStatus } from '@/features/holdings/marketValueStatus'
+import { usePageHeaderAction } from '@/app/PageHeaderAction'
 
 const useStyles = createUseStyles({
   page: { display: 'grid', gap: tokens.space.md },
-  hint: { color: tokens.color.textMuted, fontSize: tokens.font.sizeSm, lineHeight: 1.4 },
   gridWrap: {
     overflow: 'auto',
     border: `1px solid ${tokens.color.border}`,
@@ -30,8 +31,10 @@ const useStyles = createUseStyles({
   td: { padding: [tokens.space.sm, tokens.space.md], borderBottom: `1px solid ${tokens.color.border}` },
   row: { '&:nth-child(even)': { background: tokens.color.bgCard }, '&:hover': { background: tokens.color.accentSoft } },
   meta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeSm, marginTop: tokens.space.xs },
+  balance: { display: 'grid', gap: 2 },
+  balanceMeta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs, whiteSpace: 'nowrap' },
+  balanceFallback: { color: tokens.color.warning },
   totalRow: { background: tokens.color.bgMuted, fontWeight: tokens.font.weightMedium },
-  head: { display: 'flex', justifyContent: 'space-between', gap: tokens.space.md, alignItems: 'center' },
   form: { display: 'grid', gap: tokens.space.md },
 })
 
@@ -51,12 +54,18 @@ function latestBalanceDate(accountId: string, data: StoreData) {
   )
 }
 
+function investmentValueStatus(accountId: string, data: StoreData) {
+  const kind = accountId === 'mutual-funds' ? 'mutual_fund' : accountId === 'stocks-portfolio' ? 'stock' : null
+  return kind ? portfolioMarketValueStatus(data.holdings.filter((holding) => holding.kind === kind)) : null
+}
+
 export function AccountsView({ data, onSaved, onOpenUpload }: { data: StoreData; onSaved: () => Promise<void>; onOpenUpload: () => void }) {
   const classes = useStyles()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(12)
   const [drawer, setDrawer] = useState<{ id?: string } | null>(null)
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -114,25 +123,15 @@ export function AccountsView({ data, onSaved, onOpenUpload }: { data: StoreData;
     setDrawer({ id: account.id })
   }
 
-  const startAdd = () => {
+  const startAdd = useCallback(() => {
     reset({ name: '', type: 'cash', balance: '', balanceDate: todayIso() })
     setDrawer({})
-  }
+  }, [reset])
+
+  usePageHeaderAction('Add account', startAdd)
 
   return (
     <div className={classes.page}>
-      <Card>
-        <div className={classes.head}>
-          <div className={classes.hint}>
-            Saving balances on the dashboard come from accounts you add here and from imported ledgers. ICICI is Use the ICICI or SBI
-            workbook exported from your bank. Personal import files stay on your device. Money kept with people, house-owner balances, or
-            deposits count as assets (cash or other). Mutual funds and stocks are edited on their own screens.
-          </div>
-          <Button variant="primary" onClick={startAdd}>
-            Add account
-          </Button>
-        </div>
-      </Card>
       <Card>
         <div className={classes.gridWrap}>
           <table className={classes.table}>
@@ -146,21 +145,31 @@ export function AccountsView({ data, onSaved, onOpenUpload }: { data: StoreData;
               </tr>
             </thead>
             <tbody>
-              {accounts.map((account) => (
-                <tr className={classes.row} key={account.id}>
-                  <td className={classes.td}>
-                    <strong>{account.name}</strong>
-                  </td>
-                  <td className={classes.td}>{account.type}</td>
-                  <td className={classes.td}>
-                    <MoneyText amountMinor={latestBalanceMinor(account.id, data)} tone="steady" showPaise />
-                  </td>
-                  <td className={classes.td}>{account.currency}</td>
-                  <td className={classes.td}>
-                    <Button onClick={() => startEdit(account)}>Edit</Button>
-                  </td>
-                </tr>
-              ))}
+              {accounts.map((account) => {
+                const valueStatus = investmentValueStatus(account.id, data)
+                return (
+                  <tr className={classes.row} key={account.id}>
+                    <td className={classes.td}>
+                      <strong>{account.name}</strong>
+                    </td>
+                    <td className={classes.td}>{account.type}</td>
+                    <td className={classes.td}>
+                      <div className={classes.balance}>
+                        <MoneyText amountMinor={latestBalanceMinor(account.id, data)} tone="steady" showPaise />
+                        {valueStatus ? (
+                          <span className={`${classes.balanceMeta} ${valueStatus.confirmed ? '' : classes.balanceFallback}`}>
+                            {valueStatus.text}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className={classes.td}>{account.currency}</td>
+                    <td className={classes.td}>
+                      <Button onClick={() => startEdit(account)}>Edit</Button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
             <tfoot>
               <tr className={classes.totalRow}>
@@ -217,14 +226,9 @@ export function AccountsView({ data, onSaved, onOpenUpload }: { data: StoreData;
           title={drawer.id ? 'Edit account' : 'Add account'}
           onClose={() => setDrawer(null)}
           footer={
-            <>
-              <Button type="button" onClick={() => setDrawer(null)}>
-                Cancel
-              </Button>
-              <Button variant="primary" type="submit" form="account-form">
-                Save
-              </Button>
-            </>
+            <Button variant="primary" type="submit" form="account-form">
+              Save
+            </Button>
           }
         >
           <form id="account-form" className={classes.form} onSubmit={handleSubmit(saveAccount)}>
@@ -253,9 +257,11 @@ export function AccountsView({ data, onSaved, onOpenUpload }: { data: StoreData;
               <ErrorText>{errors.balance?.message}</ErrorText>
             </Field>
             <Field label="Balance date">
-              <Input
-                type="date"
-                {...register('balanceDate', { validate: (value) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value) || 'Choose a valid date.' })}
+              <Controller
+                control={control}
+                name="balanceDate"
+                rules={{ validate: (value) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value) || 'Choose a valid date.' }}
+                render={({ field }) => <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />}
               />
               <ErrorText>{errors.balanceDate?.message}</ErrorText>
             </Field>

@@ -70,16 +70,6 @@ type TableSort = { key: 'name' | 'changePct'; direction: 'asc' | 'desc' }
 type TableColumnId =
   'serial' | 'company' | 'from' | 'startPrice' | 'to' | 'currentPrice' | 'change' | 'rangeReturn' | keyof MarketFundamentals
 type MarketSymbol = StockListSymbol
-type MarketPreferences = {
-  version: 1
-  highlighted: string[]
-  exchange: Exchange
-  range: DateRangeValue
-  mode: ChartMode
-  sort: TableSort
-  columns: TableColumnId[]
-}
-type LegacyMarketPreferences = Partial<MarketPreferences> & { selected?: MarketSymbol[] }
 type MarketWatchlist = SavedStockList
 type ConfirmAction = 'delete-watchlist' | 'clear-current-stocks' | 'clear-saved-watchlists' | 'remove-stock'
 
@@ -127,8 +117,6 @@ const defaultTableColumns: TableColumnId[] = [
   'earningsGrowth',
   'returnOnEquity',
 ]
-const tableColumnIds = new Set<TableColumnId>(tableColumns.map((column) => column.id))
-
 const colors = ['#8db7ff', '#42b883', '#ff9fca', '#e5c463', '#ff7a76', '#72d6dd', '#b89cff', '#b8d97a']
 const seriesColorStyles = Object.fromEntries(
   colors.flatMap((color, index) => [
@@ -136,7 +124,6 @@ const seriesColorStyles = Object.fromEntries(
     [`seriesFill${index}`, { background: color }],
   ]),
 )
-const preferencesKey = 'finance:stock-market-filters:v1'
 const watchlistsKey = 'finance:stock-market-watchlists:v1'
 
 const defaults: MarketSymbol[] = []
@@ -171,11 +158,16 @@ const useStyles = createUseStyles({
     '@media (max-width: 760px)': { gridTemplateColumns: '1fr 1fr', '& > :last-child': { gridColumn: '1 / -1' } },
     '@media (max-width: 520px)': { gridTemplateColumns: '1fr' },
   },
-  watchlistDelete: { minWidth: '36px !important', width: 36, padding: '4px !important', color: `${tokens.color.negative} !important` },
+  watchlistDelete: {
+    minWidth: `${tokens.control.iconButtonSize}px !important`,
+    width: tokens.control.iconButtonSize,
+    padding: `${tokens.control.paddingY}px !important`,
+    color: `${tokens.color.negative} !important`,
+  },
   watchlistControls: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: tokens.space.xs },
   watchlistMenuButton: {
-    width: '36px !important',
-    height: '36px !important',
+    width: `${tokens.control.iconButtonSize}px !important`,
+    height: `${tokens.control.iconButtonSize}px !important`,
     color: `${tokens.color.textMuted} !important`,
   },
   watchlistMenuPaper: {
@@ -236,11 +228,19 @@ const useStyles = createUseStyles({
     '&:hover': { background: '#ff928f !important' },
     '&:focus-visible': { outline: `3px solid ${tokens.color.focus}`, outlineOffset: 2 },
   },
-  searchForm: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 36px', gap: tokens.space.sm },
+  searchForm: {
+    display: 'grid',
+    gridTemplateColumns: `minmax(0, 1fr) ${tokens.control.iconButtonSize}px`,
+    gap: tokens.space.sm,
+  },
   option: { display: 'grid', minWidth: 0 },
   optionName: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   optionMeta: { color: tokens.color.textMuted, fontSize: tokens.font.sizeXs },
-  iconButton: { minWidth: '36px !important', width: 36, padding: '4px !important' },
+  iconButton: {
+    minWidth: `${tokens.control.iconButtonSize}px !important`,
+    width: tokens.control.iconButtonSize,
+    padding: `${tokens.control.paddingY}px !important`,
+  },
   chips: { display: 'flex', gap: tokens.space.sm, flexWrap: 'wrap', minHeight: 32, marginTop: tokens.space.md },
   chip: {
     height: '26px !important',
@@ -322,9 +322,9 @@ const useStyles = createUseStyles({
   },
   sortableHead: { display: 'flex', alignItems: 'center', gap: tokens.space.xs, whiteSpace: 'nowrap' },
   sortButton: {
-    width: 26,
-    height: 26,
-    padding: '3px !important',
+    width: tokens.control.iconButtonSize,
+    height: tokens.control.iconButtonSize,
+    padding: `${tokens.control.paddingY}px !important`,
     color: `${tokens.color.textMuted} !important`,
     '&:hover': { color: `${tokens.color.accent} !important` },
   },
@@ -439,54 +439,6 @@ function initialRange(): DateRangeValue {
   return { from: dayjs().subtract(1, 'year').format('YYYY-MM-DD'), to: todayIso() }
 }
 
-function readPreferences(): MarketPreferences & { selected: MarketSymbol[] } {
-  const fallback: MarketPreferences & { selected: MarketSymbol[] } = {
-    version: 1,
-    selected: defaults,
-    highlighted: [],
-    exchange: 'NSE',
-    range: initialRange(),
-    mode: 'percent',
-    sort: { key: 'changePct', direction: 'desc' },
-    columns: defaultTableColumns,
-  }
-  try {
-    const value = JSON.parse(window.localStorage.getItem(preferencesKey) ?? '') as LegacyMarketPreferences
-    const selected = Array.isArray(value.selected)
-      ? value.selected
-          .filter((item): item is MarketSymbol => Boolean(item && typeof item.name === 'string' && typeof item.ticker === 'string'))
-          .slice(0, 20)
-      : fallback.selected
-    const selectedTickers = new Set(selected.map((item) => item.ticker))
-    const highlighted = Array.isArray(value.highlighted)
-      ? value.highlighted.filter((ticker): ticker is string => typeof ticker === 'string' && selectedTickers.has(ticker))
-      : fallback.highlighted
-    const exchange = value.exchange === 'NSE' || value.exchange === 'BSE' || value.exchange === 'US' ? value.exchange : fallback.exchange
-    const mode = value.mode === 'price' || value.mode === 'percent' ? value.mode : fallback.mode
-    const sort =
-      value.sort &&
-      (value.sort.key === 'name' || value.sort.key === 'changePct') &&
-      (value.sort.direction === 'asc' || value.sort.direction === 'desc')
-        ? value.sort
-        : fallback.sort
-    const range =
-      value.range &&
-      typeof value.range.from === 'string' &&
-      typeof value.range.to === 'string' &&
-      isValidDateRange(value.range) &&
-      value.range.from &&
-      value.range.to
-        ? value.range
-        : fallback.range
-    const columns = Array.isArray(value.columns)
-      ? value.columns.filter((column): column is TableColumnId => typeof column === 'string' && tableColumnIds.has(column as TableColumnId))
-      : fallback.columns
-    return { version: 1, selected, highlighted, exchange, range, mode, sort, columns }
-  } catch {
-    return fallback
-  }
-}
-
 function readWatchlists(): MarketWatchlist[] {
   try {
     const value = JSON.parse(window.localStorage.getItem(watchlistsKey) ?? '') as unknown
@@ -513,18 +465,17 @@ export function StockMarketComparison({
   recoverySymbols?: MarketSymbol[]
 }) {
   const classes = useStyles()
-  const [initialPreferences] = useState(readPreferences)
-  const [selected, setSelected] = useState<MarketSymbol[]>(initialPreferences.selected)
-  const [highlighted, setHighlighted] = useState<string[]>(initialPreferences.highlighted)
+  const [selected, setSelected] = useState<MarketSymbol[]>(() => (recoverySymbols.length ? recoverySymbols.slice(0, 20) : defaults))
+  const [highlighted, setHighlighted] = useState<string[]>([])
   const [hoveredTicker, setHoveredTicker] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [debouncedInput, setDebouncedInput] = useState('')
   const [chosenResult, setChosenResult] = useState<MarketSymbolSearchResult | null>(null)
-  const [exchange, setExchange] = useState<Exchange>(initialPreferences.exchange)
-  const [range, setRange] = useState<DateRangeValue>(initialPreferences.range)
+  const [exchange, setExchange] = useState<Exchange>('NSE')
+  const [range, setRange] = useState<DateRangeValue>(initialRange)
   const [mode, setMode] = useState<ChartMode>('percent')
-  const [tableSort, setTableSort] = useState<TableSort>(initialPreferences.sort)
-  const [visibleColumns, setVisibleColumns] = useState<TableColumnId[]>(initialPreferences.columns)
+  const [tableSort, setTableSort] = useState<TableSort>({ key: 'changePct', direction: 'desc' })
+  const [visibleColumns, setVisibleColumns] = useState<TableColumnId[]>(defaultTableColumns)
   const [columnAnchor, setColumnAnchor] = useState<HTMLElement | null>(null)
   const [watchlistMenuAnchor, setWatchlistMenuAnchor] = useState<HTMLElement | null>(null)
   const [watchlists, setWatchlists] = useState<MarketWatchlist[]>(readWatchlists)
@@ -552,10 +503,7 @@ export function StockMarketComparison({
     if (!stockListsReady || stockListsHydrated.current) return
     const cloud = stockListsQuery.data ?? null
     const recovered = recoverStockListState(cloud, watchlists, recoverySymbols)
-    setSelected(recovered.currentStocks)
     setWatchlists(recovered.watchlists)
-    const available = new Set(recovered.currentStocks.map((stock) => stock.ticker))
-    setHighlighted((current) => current.filter((ticker) => available.has(ticker)))
     lastSyncedStockLists.current = JSON.stringify(cloud)
     stockListsHydrated.current = true
     setStockListsWriteReady(true)
@@ -563,7 +511,7 @@ export function StockMarketComparison({
 
   useEffect(() => {
     if (!stockListsHydrated.current || !stockListsWriteReady || stockListsQuery.isError) return
-    const payload = { currentStocks: selected, watchlists }
+    const payload = { watchlists }
     const serialized = JSON.stringify(payload)
     if (serialized === lastSyncedStockLists.current) return
     const timer = window.setTimeout(() => {
@@ -581,24 +529,7 @@ export function StockMarketComparison({
         .catch(() => setStockListSyncError('Could not save stock lists to Firebase.'))
     }, 800)
     return () => window.clearTimeout(timer)
-  }, [selected, stockListsQuery.isError, stockListsWriteReady, watchlists])
-
-  useEffect(() => {
-    const preferences: MarketPreferences = {
-      version: 1,
-      highlighted,
-      exchange,
-      range,
-      mode,
-      sort: tableSort,
-      columns: visibleColumns,
-    }
-    try {
-      window.localStorage.setItem(preferencesKey, JSON.stringify(preferences))
-    } catch {
-      // Market comparison remains usable when browser storage is unavailable.
-    }
-  }, [exchange, highlighted, mode, range, tableSort, visibleColumns])
+  }, [stockListsQuery.isError, stockListsWriteReady, watchlists])
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedInput(input.trim()), 250)
@@ -1119,7 +1050,7 @@ export function StockMarketComparison({
           ? {
               title: 'Clear current stocks?',
               message:
-                'All stocks will be removed from the current screen. Saved watchlists will stay unchanged, and this empty screen will be preserved after reload.',
+                'All stocks will be removed from the current screen. Saved watchlists will stay unchanged, and the default stocks will return after reload.',
               confirmLabel: 'Clear stocks',
             }
           : {

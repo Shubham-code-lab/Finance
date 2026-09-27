@@ -23,9 +23,9 @@ describe('classifyStatementMemo', () => {
     expect(classifyStatementMemo('UPI/Airtel/airtel-prepaid/Airtel', 'outflow', 361).categoryId).toBe('lifestyle-utilities')
   })
 
-  it('keeps salary, rent, reimbursements, and self transfers out of generic spend', () => {
+  it('only classifies explicit salary, rent, and investment descriptions', () => {
     expect(classifyStatementMemo('NEFT-HDFCH01090826281-AMAGI MEDIA LABS PRIVATE', 'inflow', 128826)).toMatchObject({
-      categoryId: 'salary',
+      categoryId: 'unknown',
       flow: 'inflow',
     })
     expect(classifyStatementMemo('UPI/S J ARUN K/9739009054@ybl/june rent/S J ARUN KUMAR', 'outflow', 28000)).toMatchObject({
@@ -33,8 +33,8 @@ describe('classifyStatementMemo', () => {
       flow: 'outflow',
     })
     expect(classifyStatementMemo('UPI/RANGASWAMY/rsudar24@okhdf/monthly ex/RANGASWAMY J', 'inflow', 30000)).toMatchObject({
-      categoryId: 'roommate-reimbursement',
-      flow: 'transfer',
+      categoryId: 'unknown',
+      flow: 'inflow',
     })
     expect(classifyStatementMemo('UPI/investment/stock market transfer', 'outflow', 50000)).toMatchObject({
       categoryId: 'stock-market',

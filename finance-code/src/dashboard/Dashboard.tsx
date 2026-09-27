@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { AccountBalanceWallet, ChevronLeft, ChevronRight, Home, Save, Savings, ShowChart, Undo } from '@mui/icons-material'
+import { AccountBalanceWallet, ChevronLeft, ChevronRight, Home, Savings, ShowChart } from '@mui/icons-material'
 import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 import {
   ComposedChart,
@@ -30,7 +30,7 @@ import {
 import { incomeForRange } from '@/calc/income'
 import { calculateStockPerformance, performanceHoldings } from '@/calc/stockPerformance'
 import { bankAccounts, calculateWealthTotal, latestSnapshotValue } from '@/calc/wealth'
-import { Button, ErrorText, MoneyText, Select } from '@/components/ui'
+import { Button, MoneyText, Select } from '@/components/ui'
 import { DateRangePicker } from '@/components/DateRangePicker'
 import { isValidDateRange, lastThreeMonthsRange } from '@/components/dateRange'
 import { FilterStatus } from '@/components/FilterStatus'
@@ -118,7 +118,6 @@ const useStyles = createUseStyles({
     background: tokens.color.bgMuted,
   },
   checks: { display: 'flex', flexWrap: 'wrap', gap: tokens.space.sm, alignItems: 'center' },
-  sectionActions: { display: 'flex', flexWrap: 'wrap', gap: tokens.space.sm, alignItems: 'center', justifyContent: 'flex-end' },
   compactSelect: { width: 168, minWidth: 168, flex: '0 0 168px' },
   metricToggle: {
     '& .MuiToggleButtonGroup-root': { background: tokens.color.bgMuted },
@@ -126,7 +125,8 @@ const useStyles = createUseStyles({
       color: tokens.color.textMuted,
       borderColor: tokens.color.borderStrong,
       textTransform: 'none',
-      padding: '6px 12px',
+      minHeight: tokens.control.height,
+      padding: [tokens.control.paddingY, tokens.control.paddingX],
       fontSize: tokens.font.sizeSm,
     },
     '& .Mui-selected': {
@@ -366,50 +366,37 @@ function defaultDashboardViews(range: { from: string; to: string }, stockIds: st
   }
 }
 
-export function Dashboard({
-  data,
-  onDataChange,
-  onLayoutChange,
-}: {
-  data: StoreData
-  onDataChange: () => Promise<void>
-  onLayoutChange: (layout: StoreData['dashboard']) => Promise<void>
-}) {
+export function Dashboard({ data, onDataChange }: { data: StoreData; onDataChange: () => Promise<void> }) {
   const classes = useStyles()
   const { masked } = usePrivacy()
   const privateMoney = (amountMinor: number) => formatPrivateMoney(amountMinor, 'INR', false, masked)
   const [today] = useState(todayIso)
   const [month] = useState(currentMonthRange)
   const [defaultRange] = useState(lastThreeMonthsRange)
-  const wealth = data.dashboard.wealth ?? defaultWealthView
+  const wealth = defaultWealthView
   const eligibleStocks = useMemo(() => performanceHoldings(data.holdings), [data.holdings])
-  const [savedViews, setSavedViews] = useState<DashboardViewSettings>(() => {
-    const initial =
-      data.dashboard.views ??
-      defaultDashboardViews(
-        defaultRange,
-        eligibleStocks.map((holding) => holding.id),
-      )
-    return { ...initial, investment: { ...initial.investment, metric: 'percent' } }
-  })
-  const [mainRange, setMainRange] = useState(savedViews.moneyFlow.range)
-  const [savingRange, setSavingRange] = useState(savedViews.saving.range)
-  const [investmentRange, setInvestmentRange] = useState(savedViews.investment.range)
-  const [selectedStockIds, setSelectedStockIds] = useState<string[]>(savedViews.investment.stockIds)
-  const [investmentView, setInvestmentView] = useState<InvestmentView>(savedViews.investment.view)
-  const [investmentMetric, setInvestmentMetric] = useState<InvestmentMetric>(savedViews.investment.metric)
+  const [defaultViews] = useState(() =>
+    defaultDashboardViews(
+      defaultRange,
+      eligibleStocks.map((holding) => holding.id),
+    ),
+  )
+  const [mainRange, setMainRange] = useState(defaultViews.moneyFlow.range)
+  const [savingRange, setSavingRange] = useState(defaultViews.saving.range)
+  const [investmentRange, setInvestmentRange] = useState(defaultViews.investment.range)
+  const [selectedStockIds, setSelectedStockIds] = useState<string[]>(defaultViews.investment.stockIds)
+  const [investmentView, setInvestmentView] = useState<InvestmentView>(defaultViews.investment.view)
+  const [investmentMetric, setInvestmentMetric] = useState<InvestmentMetric>('percent')
   const [isFilterPending, startFilterTransition] = useTransition()
-  const [incomeRange, setIncomeRange] = useState(savedViews.income.range)
-  const [lifestyleRange, setLifestyleRange] = useState(savedViews.lifestyle.range)
-  const [savingSelection, setSavingSelection] = useState<GraphKey[]>(savedViews.saving.series as GraphKey[])
-  const [lifestyleSelection, setLifestyleSelection] = useState<GraphKey[]>(savedViews.lifestyle.series as GraphKey[])
+  const [incomeRange, setIncomeRange] = useState(defaultViews.income.range)
+  const [lifestyleRange, setLifestyleRange] = useState(defaultViews.lifestyle.range)
+  const [savingSelection, setSavingSelection] = useState<GraphKey[]>(defaultViews.saving.series as GraphKey[])
+  const [lifestyleSelection, setLifestyleSelection] = useState<GraphKey[]>(defaultViews.lifestyle.series as GraphKey[])
   const [showLifestyleTable, setShowLifestyleTable] = useState(true)
   const [graph, setGraph] = useState<Record<GraphKey, boolean>>(() => {
-    const selected = new Set(savedViews.moneyFlow.series)
+    const selected = new Set(defaultViews.moneyFlow.series)
     return Object.fromEntries(moneyFlowKeys.map((key) => [key, selected.has(key)])) as Record<GraphKey, boolean>
   })
-  const [savingView, setSavingView] = useState<keyof DashboardViewSettings | null>(null)
-  const [viewError, setViewError] = useState('')
   const selectedStocks = useMemo(
     () => eligibleStocks.filter((holding) => selectedStockIds.includes(holding.id)),
     [eligibleStocks, selectedStockIds],
@@ -611,62 +598,6 @@ export function Dashboard({
       const selected = new Set(selection)
       setGraph((current) => Object.fromEntries(Object.keys(current).map((key) => [key, selected.has(key)])) as Record<GraphKey, boolean>)
     })
-  const saveDashboardView = async (key: keyof DashboardViewSettings) => {
-    setSavingView(key)
-    setViewError('')
-    const next: DashboardViewSettings = {
-      ...savedViews,
-      ...(key === 'moneyFlow' ? { moneyFlow: { range: mainRange, series: mainGraphSelection } } : {}),
-      ...(key === 'saving' ? { saving: { range: savingRange, series: savingSelection } } : {}),
-      ...(key === 'investment'
-        ? { investment: { range: investmentRange, stockIds: selectedStockIds, view: investmentView, metric: investmentMetric } }
-        : {}),
-      ...(key === 'income' ? { income: { range: incomeRange } } : {}),
-      ...(key === 'lifestyle' ? { lifestyle: { range: lifestyleRange, series: lifestyleSelection } } : {}),
-    }
-    try {
-      await onLayoutChange({ ...data.dashboard, views: next })
-      setSavedViews(next)
-    } catch (error) {
-      setViewError(error instanceof Error ? error.message : 'Could not save this dashboard view.')
-    } finally {
-      setSavingView(null)
-    }
-  }
-  const cancelDashboardChanges = (key: keyof DashboardViewSettings) =>
-    startFilterTransition(() => {
-      if (key === 'moneyFlow') {
-        setMainRange(savedViews.moneyFlow.range)
-        const selected = new Set(savedViews.moneyFlow.series)
-        setGraph(Object.fromEntries(moneyFlowKeys.map((item) => [item, selected.has(item)])) as Record<GraphKey, boolean>)
-      }
-      if (key === 'saving') {
-        setSavingRange(savedViews.saving.range)
-        setSavingSelection(savedViews.saving.series as GraphKey[])
-      }
-      if (key === 'investment') {
-        setInvestmentRange(savedViews.investment.range)
-        setSelectedStockIds(savedViews.investment.stockIds)
-        setInvestmentView(savedViews.investment.view)
-        setInvestmentMetric(savedViews.investment.metric)
-      }
-      if (key === 'income') setIncomeRange(savedViews.income.range)
-      if (key === 'lifestyle') {
-        setLifestyleRange(savedViews.lifestyle.range)
-        setLifestyleSelection(savedViews.lifestyle.series as GraphKey[])
-      }
-      setViewError('')
-    })
-  const viewActions = (key: keyof DashboardViewSettings) => (
-    <div className={classes.sectionActions}>
-      <Button disabled={savingView === key} onClick={() => cancelDashboardChanges(key)}>
-        <Undo fontSize="small" /> Cancel changes
-      </Button>
-      <Button variant="primary" disabled={savingView === key} onClick={() => saveDashboardView(key)}>
-        <Save fontSize="small" /> {savingView === key ? 'Saving...' : 'Save view'}
-      </Button>
-    </div>
-  )
   const renderMiniChart = (keys: GraphKey[], selectedRange: { from: string; to: string }, selectedKeys: GraphKey[] = keys) => (
     <div className={classes.miniChart}>
       <ResponsiveContainer width="100%" height="100%">
@@ -821,12 +752,9 @@ export function Dashboard({
         ))}
       </div>
 
-      <ErrorText>{viewError}</ErrorText>
-
       <section className={classes.panel}>
         <div className={classes.panelHead}>
           <h2 className={classes.panelTitle}>Money flow</h2>
-          {viewActions('moneyFlow')}
         </div>
         <div className={classes.filterBar}>
           <FilterStatus fetching={isFilterPending} ready={!isFilterPending} />
@@ -864,7 +792,6 @@ export function Dashboard({
         <section className={classes.section}>
           <div className={classes.sectionHead}>
             <h3 className={classes.sectionTitle}>Saving</h3>
-            {viewActions('saving')}
           </div>
           <div className={classes.filterBar}>
             <FilterStatus fetching={isFilterPending} ready={!isFilterPending} />
@@ -933,7 +860,6 @@ export function Dashboard({
         <section className={classes.section}>
           <div className={classes.sectionHead}>
             <h3 className={classes.sectionTitle}>Investment</h3>
-            {viewActions('investment')}
           </div>
           <div className={classes.filterBar}>
             <FilterStatus fetching={filtersBusy} ready={filtersReady} />
@@ -1132,7 +1058,6 @@ export function Dashboard({
         <section className={classes.section}>
           <div className={classes.sectionHead}>
             <h3 className={classes.sectionTitle}>Income</h3>
-            {viewActions('income')}
           </div>
           <div className={classes.filterBar}>
             <FilterStatus fetching={isFilterPending} ready={!isFilterPending} />
@@ -1192,7 +1117,6 @@ export function Dashboard({
                 <MoneyText amountMinor={selectedLifestyleAverage} tone="negative" />
               </div>
             </div>
-            {viewActions('lifestyle')}
           </div>
           <div className={classes.filterBar}>
             <FilterStatus fetching={isFilterPending} ready={!isFilterPending} />
